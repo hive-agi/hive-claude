@@ -1,0 +1,80 @@
+(ns hive-claude.sync
+  "Hivemind state synchronization for hive-claude sessions.
+
+   Receives hivemind shout events and updates session state accordingly.
+   Event-to-state mapping:
+   - hivemind-started    -> status: working
+   - hivemind-progress   -> status: working (maintained)
+   - hivemind-completed  -> status: idle, increment tasks-completed
+   - hivemind-error      -> status: idle, increment tasks-failed
+   - hivemind-blocked    -> status: blocked
+
+   This module is registered as a hook callback by the addon init.")
+
+;; ============================================================================
+;; Dependencies
+;; ============================================================================
+
+(declare-function hive-claude-state-get-session "hive-claude-state")
+(declare-function hive-claude-state-put-field "hive-claude-state")
+
+;; ============================================================================
+;; Helpers
+;; ============================================================================
+
+(defn- event-matches? [event-type target]
+  "Return non-nil if EVENT-TYPE matches TARGET (with or without colon prefix)."
+  (or (string-equal event-type target)
+      (string-equal event-type (format ":%s" target))))
+
+(defn- handle-started [agent-id event-data]
+  "Handle hivemind-started: set working status."
+  (hive-claude-state-put-field agent-id :status 'working)
+  (hive-claude-state-put-field agent-id :current-task
+    (plist-get event-data :task)))
+
+(defn- handle-progress [agent-id]
+  "Handle hivemind-progress: maintain working status."
+  (hive-claude-state-put-field agent-id :status 'working))
+
+(defn- handle-completed [agent-id session]
+  "Handle hivemind-completed: set idle, increment counter."
+  (hive-claude-state-put-field agent-id :status 'idle)
+  (hive-claude-state-put-field agent-id :current-task nil)
+  (hive-claude-state-put-field agent-id :tasks-completed
+    (+ (or (plist-get session :tasks-completed) 0) 1)))
+
+(defn- handle-error [agent-id session]
+  "Handle hivemind-error: set idle, increment failures."
+  (hive-claude-state-put-field agent-id :status 'idle)
+  (hive-claude-state-put-field agent-id :current-task nil)
+  (hive-claude-state-put-field agent-id :tasks-failed
+    (+ (or (plist-get session :tasks-failed) 0) 1)))
+
+(defn- handle-blocked [agent-id]
+  "Handle hivemind-blocked: set blocked status."
+  (hive-claude-state-put-field agent-id :status 'blocked))
+
+;; ============================================================================
+;; Sync Handler
+;; ============================================================================
+
+(defn sync-from-hivemind [event-data]
+  "Sync session state from hivemind EVENT-DATA.
+
+   Called via hooks when hivemind receives shout events.
+   Maps agent-id to slave-id and updates status accordingly."
+  (let [agent-id (plist-get event-data :agent-id)
+        event-type (plist-get event-data :event-type)
+        session (when agent-id (hive-claude-state-get-session agent-id))]
+    (when session
+      (if (hive-claude-sync--event-matches? event-type "hivemind-started")
+        (hive-claude-sync--handle-started agent-id event-data)
+        (if (hive-claude-sync--event-matches? event-type "hivemind-progress")
+          (hive-claude-sync--handle-progress agent-id)
+          (if (hive-claude-sync--event-matches? event-type "hivemind-completed")
+            (hive-claude-sync--handle-completed agent-id session)
+            (if (hive-claude-sync--event-matches? event-type "hivemind-error")
+              (hive-claude-sync--handle-error agent-id session)
+              (when (hive-claude-sync--event-matches? event-type "hivemind-blocked")
+                (hive-claude-sync--handle-blocked agent-id)))))))))

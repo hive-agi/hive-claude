@@ -1,0 +1,73 @@
+(ns hive-claude.state
+  "Slave session state management for hive-claude terminal backend.
+
+   Maintains a hash-table of slave-id -> session plist, tracking buffer,
+   status, presets, cwd, and task counters for each spawned Claude instance.
+
+   This is the single source of truth for all Emacs-side ling state.
+   The JVM-side DataScript DB is the authority; this is the Emacs mirror.")
+
+;; ============================================================================
+;; State
+;; ============================================================================
+
+(def sessions (make-hash-table :test 'equal))
+
+;; ============================================================================
+;; Accessors
+;; ============================================================================
+
+(defn get-session [slave-id]
+  "Get session plist for SLAVE-ID, or nil."
+  (gethash slave-id hive-claude-state-sessions))
+
+(defn get-field [slave-id key]
+  "Get KEY from session SLAVE-ID."
+  (let [session (gethash slave-id hive-claude-state-sessions)]
+    (when session
+      (plist-get session key))))
+
+(defn put-field [slave-id key value]
+  "Set KEY to VALUE in session SLAVE-ID."
+  (let [session (or (gethash slave-id hive-claude-state-sessions) '())]
+    (puthash slave-id (plist-put session key value) hive-claude-state-sessions)))
+
+;; ============================================================================
+;; Lifecycle
+;; ============================================================================
+
+(defn register-session [slave-id props]
+  "Register a new session with initial PROPS plist."
+  (puthash slave-id props hive-claude-state-sessions))
+
+(defn remove-session [slave-id]
+  "Remove session SLAVE-ID from registry."
+  (remhash slave-id hive-claude-state-sessions))
+
+(defn session-exists? [slave-id]
+  "Return non-nil if SLAVE-ID is registered."
+  (gethash slave-id hive-claude-state-sessions))
+
+;; ============================================================================
+;; Enumeration
+;; ============================================================================
+
+(defn all-session-ids []
+  "Return list of all registered slave-ids."
+  (hash-table-keys hive-claude-state-sessions))
+
+(defn session-count []
+  "Return count of registered sessions."
+  (hash-table-count hive-claude-state-sessions))
+
+(defn for-each-session [callback]
+  "Call CALLBACK with (slave-id session) for each registered session."
+  (maphash callback hive-claude-state-sessions))
+
+;; ============================================================================
+;; Bulk Operations
+;; ============================================================================
+
+(defn clear-all []
+  "Remove all sessions. Used during shutdown."
+  (clrhash hive-claude-state-sessions))

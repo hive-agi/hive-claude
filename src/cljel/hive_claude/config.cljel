@@ -1,0 +1,100 @@
+(ns hive-claude.config
+  "Claude CLI command building and configuration.
+
+   Constructs the shell command to launch `claude` with appropriate flags:
+   permission mode, system prompt file, working directory, and environment
+   variables (CLAUDE_SWARM_DEPTH, CLAUDE_SWARM_MASTER, CLAUDE_SWARM_SLAVE_ID).
+
+   Terminal-agnostic: produces a command string that any terminal backend
+   (vterm, eat, claude-code-ide) can execute.")
+
+;; ============================================================================
+;; Customizable
+;; ============================================================================
+
+(defvar claude-command "claude"
+  "Path to the Claude Code CLI binary.")
+
+(defvar prompt-mode 'bypass
+  "Permission mode for spawned lings.
+   - bypass: Use --permission-mode bypassPermissions
+   - human: Forward prompts to master
+   - auto: Timer-based auto-approve")
+
+(defvar buffer-prefix "*swarm-"
+  "Prefix for swarm terminal buffer names.")
+
+;; ============================================================================
+;; Command Building
+;; ============================================================================
+
+(defn- permission-flag []
+  "Return the CLI flag string for the current prompt mode."
+  (pcase hive-claude-config-prompt-mode
+    ('bypass "--permission-mode bypassPermissions")
+    (_unused "")))
+
+(defn build-command [work-dir system-prompt-file]
+  "Build the claude CLI command string.
+
+   WORK-DIR is the working directory to cd into.
+   SYSTEM-PROMPT-FILE is an optional path to a temp .md file with the prompt.
+
+   Returns a shell command string ready to send to a terminal."
+  (let [base-cmd (format "cd %s && %s %s"
+                         (shell-quote-argument work-dir)
+                         hive-claude-config-claude-command
+                         (hive-claude-config--permission-flag))]
+    (if system-prompt-file
+      (format "%s --system-prompt %s" base-cmd (shell-quote-argument system-prompt-file))
+      base-cmd)))
+
+(defn build-env [slave-id depth master-id]
+  "Build process-environment additions for a Claude session.
+
+   Returns a list of KEY=VALUE strings to prepend to process-environment."
+  (list (format "CLAUDE_SWARM_DEPTH=%d" depth)
+        (format "CLAUDE_SWARM_MASTER=%s" (or master-id "direct"))
+        (format "CLAUDE_SWARM_SLAVE_ID=%s" slave-id)))
+
+(defn make-buffer-name [name]
+  "Create a buffer name for a claude ling.
+   NAME is the human-readable ling name."
+  (format "%s%s*" hive-claude-config-buffer-prefix name))
+
+;; ============================================================================
+;; System Prompt
+;; ============================================================================
+
+(defn write-prompt-file [content]
+  "Write CONTENT to a temp file for --system-prompt flag.
+   Returns the file path."
+  (let [prompt-file (make-temp-file "swarm-prompt-" nil ".md")]
+    (with-temp-file prompt-file
+      (insert content))
+    prompt-file))
+
+(defn build-identity-section [slave-id work-dir]
+  "Build the identity preamble injected into every ling's system prompt.
+
+   This ensures lings know their exact agent ID and working directory,
+   preventing ID hallucination (Architecture > LLM behavior)."
+  (format "## YOUR IDENTITY AND ENVIRONMENT (CRITICAL)
+
+**Your agent ID is: `%s`**
+**Your working directory is: `%s`**
+
+You MUST use this EXACT ID in ALL hivemind tool calls:
+- `hivemind_shout(agent_id: \"%s\", ...)`
+- `hivemind_ask(agent_id: \"%s\", ...)`
+
+You MUST use paths relative to your working directory or use the EXACT path above.
+- CORRECT: `src/hive_mcp/foo.clj` or `%s/src/hive_mcp/foo.clj`
+- WRONG: `/Users/...` or `/home/otheruser/...` (DO NOT hallucinate paths!)
+
+DO NOT invent your own ID. DO NOT use short names like \"ling-worker\".
+The coordinator tracks you by this exact ID.
+
+---
+
+" slave-id work-dir slave-id slave-id work-dir))
