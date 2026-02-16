@@ -1,0 +1,6 @@
+{:addon/id           "hive.claude"
+ :addon/type         :native
+ :addon/init-ns      "hive-claude.init"
+ :addon/init-fn      "init-as-addon!"
+ :addon/capabilities #{:terminal :headless :health-reporting}
+ :addon/description  "Claude Code provider — terminal and headless backends"}

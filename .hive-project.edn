@@ -1,5 +1,5 @@
 {:project-id "hive-claude"
  :parent "hive"
- :description "Claude Code terminal backend for hive-mcp — spawns claude CLI in Emacs vterm/claude-code-ide buffers"
- :language :clojure-elisp
- :tags ["claude" "emacs" "cljel" "vterm" "claude-code-ide" "terminal-addon" "ling"]}
+ :description "Claude Code terminal backend — hybrid cljel + JVM addon for hive-mcp. Emacs-side bridge (cljel) + JVM ITerminalAddon registered as :claude"
+ :language :clojure
+ :tags ["claude" "emacs" "cljel" "terminal-addon" "ling" "addon" "hybrid"]}

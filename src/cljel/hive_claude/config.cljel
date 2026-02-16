@@ -12,16 +12,16 @@
 ;; Customizable
 ;; ============================================================================
 
-(defvar claude-command "claude"
+(defvar hive-claude-config-claude-command "claude"
   "Path to the Claude Code CLI binary.")
 
-(defvar prompt-mode 'bypass
+(defvar hive-claude-config-prompt-mode 'bypass
   "Permission mode for spawned lings.
    - bypass: Use --permission-mode bypassPermissions
    - human: Forward prompts to master
    - auto: Timer-based auto-approve")
 
-(defvar buffer-prefix "*swarm-"
+(defvar hive-claude-config-buffer-prefix "*swarm-"
   "Prefix for swarm terminal buffer names.")
 
 ;; ============================================================================

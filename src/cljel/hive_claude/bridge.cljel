@@ -54,7 +54,7 @@
 ;; Customizable
 ;; ============================================================================
 
-(defvar default-terminal 'claude-code-ide
+(defvar hive-claude-bridge-default-terminal 'claude-code-ide
   "Default terminal backend for spawning Claude lings.
    - claude-code-ide: WebSocket MCP integration (recommended)
    - vterm: Native terminal
@@ -88,7 +88,7 @@
   (with-current-buffer buffer
     (vterm-mode)
     (run-at-time 0.5 nil
-      (lambda (_unused)
+      (lambda ()
         (condition-case err
           (when (buffer-live-p buffer)
             (with-current-buffer buffer
@@ -104,7 +104,7 @@
     (eat-mode)
     (eat-exec buffer "swarm-shell" "/bin/bash" nil '("-l")))
   (run-at-time 0.5 nil
-    (lambda (_unused)
+    (lambda ()
       (condition-case err
         (when (buffer-live-p buffer)
           (with-current-buffer buffer
@@ -202,7 +202,7 @@
 
     ;; Schedule transition to idle
     (run-at-time 3 nil
-      (lambda (_unused)
+      (lambda ()
         (condition-case _err
           (let [session (hive-claude-state-get-session slave-id)]
             (when (and session (memq (plist-get session :status) '(starting spawning)))
@@ -331,7 +331,7 @@
         (pcase terminal
           ('vterm (vterm-send-key "c" nil nil t))
           ('eat (when (and (boundp 'eat-terminal) eat-terminal)
-                  (eat-term-send-string eat-terminal "\C-c")))
+                  (eat-term-send-string eat-terminal "\\C-c")))
           ('claude-code-ide
            (when (fboundp 'claude-code-ide--terminal-send-string)
              ;; claude-code-ide handles interrupt via its own mechanism
