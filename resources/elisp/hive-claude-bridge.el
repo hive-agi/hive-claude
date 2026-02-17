@@ -127,7 +127,11 @@
     (pcase terminal ('claude-code-ide (with-current-buffer buffer
     (when (fboundp 'claude-code-ide--terminal-send-string)
     (claude-code-ide--terminal-send-string prompt)
-    (claude-code-ide--terminal-send-return)))) ('vterm (with-current-buffer buffer
+    (let* ((buf buffer))
+    (run-at-time 0.2 nil (lambda ()
+    (when (buffer-live-p buf)
+    (with-current-buffer buf
+    (claude-code-ide--terminal-send-return))))))))) ('vterm (with-current-buffer buffer
     (vterm-send-string prompt)
     (vterm-send-return))) ('eat (with-current-buffer buffer
     (when (and (boundp 'eat-terminal) eat-terminal)

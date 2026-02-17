@@ -63,14 +63,27 @@
 ;; Spawn Context Helper
 ;; =============================================================================
 
+(def ^:private ^:const max-context-chars
+  "Max context size in chars. Claude CLI crashes when system prompt
+   (context + presets + identity) exceeds ~120KB. Cap context at 80KB
+   to leave room for preset and identity overhead."
+  80000)
+
 (defn- spawn-context-file
-  "Write catchup context to temp file, returning file path or nil."
+  "Write catchup context to temp file, returning file path or nil.
+   Truncates context exceeding max-context-chars to prevent CLI crash."
   [cwd]
   (try
     (when-let [catchup-fn (try-resolve 'hive-mcp.tools.catchup/spawn-context)]
       (when-let [spawn-ctx (catchup-fn cwd)]
-        (let [tmp (java.io.File/createTempFile "hive-claude-ctx-" ".md")]
-          (spit tmp spawn-ctx)
+        (let [ctx (if (> (count spawn-ctx) max-context-chars)
+                    (do (log/warn "Spawn context truncated"
+                                  {:original-size (count spawn-ctx)
+                                   :max max-context-chars})
+                        (subs spawn-ctx 0 max-context-chars))
+                    spawn-ctx)
+              tmp (java.io.File/createTempFile "hive-claude-ctx-" ".md")]
+          (spit tmp ctx)
           (.getAbsolutePath tmp))))
     (catch Exception _ nil)))
 

@@ -226,11 +226,18 @@
     (when (and buffer (buffer-live-p buffer))
       (pcase terminal
         ('claude-code-ide
-         ;; claude-code-ide uses its own send mechanism
+         ;; claude-code-ide uses its own send mechanism.
+         ;; Delay Return after paste — terminal needs time to process
+         ;; large multi-line text before accepting the submit key.
          (with-current-buffer buffer
            (when (fboundp 'claude-code-ide--terminal-send-string)
              (claude-code-ide--terminal-send-string prompt)
-             (claude-code-ide--terminal-send-return))))
+             (let [buf buffer]
+               (run-at-time 0.2 nil
+                 (lambda ()
+                   (when (buffer-live-p buf)
+                     (with-current-buffer buf
+                       (claude-code-ide--terminal-send-return)))))))))
         ('vterm
          (with-current-buffer buffer
            (vterm-send-string prompt)
