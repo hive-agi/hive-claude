@@ -4,3 +4,4 @@
 out/*.el
 out/**/*.el
 *.elc
+local.deps.edn
