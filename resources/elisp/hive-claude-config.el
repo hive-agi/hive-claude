@@ -7,15 +7,20 @@
 
 
 
-(defvar hive-claude-config-claude-command "claude" "Path to the Claude Code CLI binary.")
+(defvar hive-claude-config-claude-command "claude"
+  "Path to the Claude Code CLI binary.")
 
-(defvar hive-claude-config-prompt-mode 'bypass "Permission mode for spawned lings.\n   - bypass: Use --permission-mode bypassPermissions\n   - human: Forward prompts to master\n   - auto: Timer-based auto-approve")
+(defvar hive-claude-config-prompt-mode 'bypass
+  "Permission mode for spawned lings.\n   - bypass: Use --permission-mode bypassPermissions\n   - human: Forward prompts to master\n   - auto: Timer-based auto-approve")
 
-(defvar hive-claude-config-buffer-prefix "*swarm-" "Prefix for swarm terminal buffer names.")
+(defvar hive-claude-config-buffer-prefix "*swarm-"
+  "Prefix for swarm terminal buffer names.")
 
 (defun hive-claude-config--permission-flag ()
   "Return the CLI flag string for the current prompt mode."
-  (pcase hive-claude-config-prompt-mode ('bypass "--permission-mode bypassPermissions") (_unused "")))
+  (pcase hive-claude-config-prompt-mode
+  ((quote bypass) "--permission-mode bypassPermissions")
+  ('_unused "")))
 
 (defun hive-claude-config-build-command (work-dir system-prompt-file)
   "Build the claude CLI command string.\n\n   WORK-DIR is the working directory to cd into.\n   SYSTEM-PROMPT-FILE is an optional path to a temp .md file with the prompt.\n\n   Returns a shell command string ready to send to a terminal."

@@ -22,9 +22,10 @@
   (swap! session-registry update ling-id merge updates))
 
 (defn unregister-session!
-  "Remove a session from registry."
+  "Remove a session from registry. Closes all associated channels."
   [ling-id]
   (when-let [session (get @session-registry ling-id)]
+    (when-let [ch (:active-dispatch-ch session)] (close! ch))
     (when-let [ch (:message-ch session)] (close! ch))
     (when-let [ch (:result-ch session)] (close! ch)))
   (swap! session-registry dissoc ling-id)

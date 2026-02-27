@@ -229,7 +229,10 @@
                       {:ling-id ling-id})))
     (when dispatch-context
       (session/update-session! ling-id {:dispatch-context dispatch-context}))
+    ;; Track active dispatch channel in session so kill can close it.
+    ;; Without this, consumer threads stay blocked on <!! forever.
     (let [out-ch (chan 4096)]
+      (session/update-session! ling-id {:active-dispatch-ch out-ch})
       (async/thread
         (try
           (if raw?
@@ -242,7 +245,8 @@
                        {:ling-id ling-id :error (ex-message e)})
             (>!! out-ch {:type :error :error (ex-message e)}))
           (finally
-            (close! out-ch))))
+            (close! out-ch)
+            (rescue nil (session/update-session! ling-id {:active-dispatch-ch nil})))))
       out-ch)))
 
 (defn kill-headless-sdk!
@@ -255,6 +259,8 @@
       (when (and client-var loop-var)
         (event-loop/disconnect-session-client! safe-id loop-var client-var)
         (event-loop/stop-session-loop! safe-id loop-var))
+      ;; Close active dispatch channel to unblock any consumer threads.
+      (when-let [dispatch-ch (:active-dispatch-ch sess)] (close! dispatch-ch))
       (when-let [msg-ch (:message-ch sess)] (close! msg-ch))
       (when-let [res-ch (:result-ch sess)] (close! res-ch))
       (session/unregister-session! ling-id)

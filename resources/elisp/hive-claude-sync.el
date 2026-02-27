@@ -11,6 +11,10 @@
 
 (declare-function hive-claude-state-put-field "hive-claude-state")
 
+(declare-function hive-mcp-swarm-hooks-register "hive-mcp-swarm-hooks")
+
+(declare-function hive-mcp-swarm-hooks-unregister "hive-mcp-swarm-hooks")
+
 (defun hive-claude-sync--event-matches-p (event-type target)
   "Return non-nil if EVENT-TYPE matches TARGET (with or without colon prefix)."
   (or (string-equal event-type target) (string-equal event-type (format ":%s" target))))
@@ -49,6 +53,18 @@
     (when session
     (if (hive-claude-sync--event-matches-p event-type "hivemind-started") (hive-claude-sync--handle-started agent-id event-data) (if (hive-claude-sync--event-matches-p event-type "hivemind-progress") (hive-claude-sync--handle-progress agent-id) (if (hive-claude-sync--event-matches-p event-type "hivemind-completed") (hive-claude-sync--handle-completed agent-id session) (if (hive-claude-sync--event-matches-p event-type "hivemind-error") (hive-claude-sync--handle-error agent-id session) (when (hive-claude-sync--event-matches-p event-type "hivemind-blocked")
     (hive-claude-sync--handle-blocked agent-id)))))))))
+
+(defun hive-claude-sync-register-hooks-bang ()
+  "Register sync-from-hivemind with the swarm hooks system.\n   Called during hive-claude addon initialization."
+  (when (fboundp 'hive-mcp-swarm-hooks-register)
+    (dolist (event-type '(:hivemind-started :hivemind-progress :hivemind-completed :hivemind-error :hivemind-blocked))
+    (hive-mcp-swarm-hooks-register event-type #'hive-claude-sync-sync-from-hivemind))))
+
+(defun hive-claude-sync-unregister-hooks-bang ()
+  "Unregister sync hooks. Called during shutdown."
+  (when (fboundp 'hive-mcp-swarm-hooks-unregister)
+    (dolist (event-type '(:hivemind-started :hivemind-progress :hivemind-completed :hivemind-error :hivemind-blocked))
+    (hive-mcp-swarm-hooks-unregister event-type #'hive-claude-sync-sync-from-hivemind))))
 
 (provide 'hive-claude-sync)
 ;;; hive-claude-sync.el ends here

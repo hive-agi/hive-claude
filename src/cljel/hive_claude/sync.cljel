@@ -17,6 +17,8 @@
 
 (declare-function hive-claude-state-get-session "hive-claude-state")
 (declare-function hive-claude-state-put-field "hive-claude-state")
+(declare-function hive-mcp-swarm-hooks-register "hive-mcp-swarm-hooks")
+(declare-function hive-mcp-swarm-hooks-unregister "hive-mcp-swarm-hooks")
 
 ;; ============================================================================
 ;; Helpers
@@ -78,3 +80,24 @@
               (hive-claude-sync--handle-error agent-id session)
               (when (hive-claude-sync--event-matches? event-type "hivemind-blocked")
                 (hive-claude-sync--handle-blocked agent-id)))))))))
+
+;; ============================================================================
+;; Hook Registration
+;; ============================================================================
+
+(defn register-hooks! []
+  "Register sync-from-hivemind with the swarm hooks system.
+   Called during hive-claude addon initialization."
+  (when (fboundp 'hive-mcp-swarm-hooks-register)
+    (dolist [event-type '(:hivemind-started :hivemind-progress
+                          :hivemind-completed :hivemind-error
+                          :hivemind-blocked)]
+      (hive-mcp-swarm-hooks-register event-type #'hive-claude-sync-sync-from-hivemind))))
+
+(defn unregister-hooks! []
+  "Unregister sync hooks. Called during shutdown."
+  (when (fboundp 'hive-mcp-swarm-hooks-unregister)
+    (dolist [event-type '(:hivemind-started :hivemind-progress
+                          :hivemind-completed :hivemind-error
+                          :hivemind-blocked)]
+      (hive-mcp-swarm-hooks-unregister event-type #'hive-claude-sync-sync-from-hivemind))))

@@ -45,25 +45,34 @@
 
 (declare-function hive-claude-state-put-field "hive-claude-state")
 
-(defvar hive-claude-config-buffer-prefix)
+(defvar hive-claude-config-buffer-prefix nil)
 
-(defvar hive-claude-config-prompt-mode)
+(defvar hive-claude-config-prompt-mode nil)
 
-(defvar hive-claude-bridge-default-terminal 'claude-code-ide "Default terminal backend for spawning Claude lings.\n   - claude-code-ide: WebSocket MCP integration (recommended)\n   - vterm: Native terminal\n   - eat: Pure elisp (experimental)")
+(defvar hive-claude-bridge-default-terminal 'claude-code-ide
+  "Default terminal backend for spawning Claude lings.\n   - claude-code-ide: WebSocket MCP integration (recommended)\n   - vterm: Native terminal\n   - eat: Pure elisp (experimental)")
 
 (defun hive-claude-bridge--ensure-terminal-available (backend)
   "Ensure the terminal BACKEND package is loaded. Signals error if unavailable."
-  (pcase backend ('claude-code-ide (unless (require 'claude-code-ide nil t) (error "claude-code-ide is required but not available"))) ('vterm (unless (and (require 'vterm nil t) (fboundp 'vterm-mode) (fboundp 'vterm-send-string)) (error "vterm is required but not available"))) ('eat (unless (require 'eat nil t) (error "eat is required but not available")))))
+  (pcase backend
+  ((quote claude-code-ide) (unless (require 'claude-code-ide nil t)
+    (error "claude-code-ide is required but not available")))
+  ((quote vterm) (unless (and (require 'vterm nil t) (fboundp 'vterm-mode) (fboundp 'vterm-send-string))
+    (error "vterm is required but not available")))
+  ((quote eat) (unless (require 'eat nil t)
+    (error "eat is required but not available")))))
 
 (defun hive-claude-bridge--spawn-vterm (buffer slave-id work-dir claude-cmd)
   "Spawn Claude in a vterm BUFFER. Sends CLAUDE-CMD after vterm initializes."
   (with-current-buffer buffer
     (vterm-mode)
     (run-at-time 0.5 nil (lambda ()
-    (condition-case err (when (buffer-live-p buffer)
+    (condition-case err
+    (when (buffer-live-p buffer)
     (with-current-buffer buffer
     (vterm-send-string claude-cmd)
-    (vterm-send-return))) (error (message "[hive-claude] vterm send error for %s: %s" slave-id (error-message-string err))))))))
+    (vterm-send-return)))
+  (error (message "[hive-claude] vterm send error for %s: %s" slave-id (error-message-string err))))))))
 
 (defun hive-claude-bridge--spawn-eat (buffer slave-id work-dir claude-cmd)
   "Spawn Claude in an eat BUFFER. Starts shell then sends CLAUDE-CMD."
@@ -71,17 +80,20 @@
     (eat-mode)
     (eat-exec buffer "swarm-shell" "/bin/bash" nil '("-l")))
   (run-at-time 0.5 nil (lambda ()
-    (condition-case err (when (buffer-live-p buffer)
+    (condition-case err
+    (when (buffer-live-p buffer)
     (with-current-buffer buffer
     (when (and (boundp 'eat-terminal) eat-terminal)
     (eat-term-send-string eat-terminal claude-cmd)
-    (eat-term-send-string eat-terminal "\r")))) (error (message "[hive-claude] eat send error for %s: %s" slave-id (error-message-string err)))))))
+    (eat-term-send-string eat-terminal "\r"))))
+  (error (message "[hive-claude] eat send error for %s: %s" slave-id (error-message-string err)))))))
 
 (defun hive-claude-bridge--spawn-claude-code-ide (buffer-name slave-id work-dir system-prompt-file)
   "Spawn Claude via claude-code-ide with WebSocket MCP integration.\n   Returns (buffer . process) cons cell."
   (let* ((port (when (fboundp 'claude-code-ide-mcp-server-ensure-server)
     (claude-code-ide-mcp-server-ensure-server))))
-    (unless port (error "Failed to start MCP server for claude-code-ide backend"))
+    (unless port
+    (error "Failed to start MCP server for claude-code-ide backend"))
     (claude-code-ide--create-terminal-session buffer-name work-dir port nil nil slave-id system-prompt-file)))
 
 (defun hive-claude-bridge-spawn (slave-id name opts)
@@ -94,7 +106,9 @@
         (injected-ctx (plist-get opts :injected-context))
         (buffer-name (hive-claude-config-make-buffer-name name))
         (base-prompt (when (fboundp 'hive-mcp-swarm-presets-build-system-prompt)
-    (condition-case _err (hive-mcp-swarm-presets-build-system-prompt presets injected-ctx) (error nil))))
+    (condition-case _err
+    (hive-mcp-swarm-presets-build-system-prompt presets injected-ctx)
+  (error nil))))
         (identity (hive-claude-config-build-identity-section slave-id work-dir))
         (system-prompt (if base-prompt (format "%s%s" identity base-prompt) identity))
         (prompt-file (hive-claude-config-write-prompt-file system-prompt)))
@@ -104,17 +118,22 @@
         (claude-cmd (hive-claude-config-build-command work-dir prompt-file))
         (default-directory work-dir)
         (process-environment (append env-additions process-environment)))
-    (pcase terminal ('claude-code-ide (let* ((result (hive-claude-bridge--spawn-claude-code-ide buffer-name slave-id work-dir prompt-file)))
+    (pcase terminal
+  ((quote claude-code-ide) (let* ((result (hive-claude-bridge--spawn-claude-code-ide buffer-name slave-id work-dir prompt-file)))
     (hive-claude-state-put-field slave-id :buffer (car result))
-    (hive-claude-state-put-field slave-id :process (cdr result)))) ('vterm (let* ((buffer (generate-new-buffer buffer-name)))
+    (hive-claude-state-put-field slave-id :process (cdr result))))
+  ((quote vterm) (let* ((buffer (generate-new-buffer buffer-name)))
     (hive-claude-state-put-field slave-id :buffer buffer)
-    (hive-claude-bridge--spawn-vterm buffer slave-id work-dir claude-cmd))) ('eat (let* ((buffer (generate-new-buffer buffer-name)))
+    (hive-claude-bridge--spawn-vterm buffer slave-id work-dir claude-cmd)))
+  ((quote eat) (let* ((buffer (generate-new-buffer buffer-name)))
     (hive-claude-state-put-field slave-id :buffer buffer)
     (hive-claude-bridge--spawn-eat buffer slave-id work-dir claude-cmd)))))
     (run-at-time 3 nil (lambda ()
-    (condition-case _err (let* ((session (hive-claude-state-get-session slave-id)))
+    (condition-case _err
+    (let* ((session (hive-claude-state-get-session slave-id)))
     (when (and session (memq (plist-get session :status) '(starting spawning)))
-    (hive-claude-state-put-field slave-id :status 'idle))) (error nil))))
+    (hive-claude-state-put-field slave-id :status 'idle)))
+  (error nil))))
     (hive-claude-state-put-field slave-id :status 'starting)
     (message "[hive-claude] Spawned %s via %s" slave-id terminal)
     slave-id))
@@ -124,16 +143,19 @@
   (let* ((buffer (hive-claude-state-get-field slave-id :buffer))
         (terminal (or (hive-claude-state-get-field slave-id :terminal) hive-claude-bridge-default-terminal)))
     (when (and buffer (buffer-live-p buffer))
-    (pcase terminal ('claude-code-ide (with-current-buffer buffer
+    (pcase terminal
+  ((quote claude-code-ide) (with-current-buffer buffer
     (when (fboundp 'claude-code-ide--terminal-send-string)
     (claude-code-ide--terminal-send-string prompt)
     (let* ((buf buffer))
     (run-at-time 0.2 nil (lambda ()
     (when (buffer-live-p buf)
     (with-current-buffer buf
-    (claude-code-ide--terminal-send-return))))))))) ('vterm (with-current-buffer buffer
+    (claude-code-ide--terminal-send-return)))))))))
+  ((quote vterm) (with-current-buffer buffer
     (vterm-send-string prompt)
-    (vterm-send-return))) ('eat (with-current-buffer buffer
+    (vterm-send-return)))
+  ((quote eat) (with-current-buffer buffer
     (when (and (boundp 'eat-terminal) eat-terminal)
     (eat-term-send-string eat-terminal prompt)
     (eat-term-send-string eat-terminal "\r")))))
@@ -150,18 +172,30 @@
 (defun hive-claude-bridge-kill (slave-id)
   "Kill the Claude ling SLAVE-ID. Returns t on success, nil if blocked."
   (let* ((session (hive-claude-state-get-session slave-id)))
-    (if (not session) (progn (message "[hive-claude] Slave not found: %s" slave-id) nil) (let* ((buffer (plist-get session :buffer)))
-    (if (null buffer) (progn (hive-claude-state-remove-session slave-id) t) (if (not (buffer-live-p buffer)) (progn (hive-claude-state-remove-session slave-id) t) (if (not (hive-claude-bridge--valid-kill-target-p buffer slave-id)) (progn (message "[hive-claude] BLOCKED: safety validation failed for %s" slave-id) (hive-claude-state-remove-session slave-id) nil) (progn (with-current-buffer buffer
+    (if (not session) (progn
+  (message "[hive-claude] Slave not found: %s" slave-id)
+  nil) (let* ((buffer (plist-get session :buffer)))
+    (if (null buffer) (progn
+  (hive-claude-state-remove-session slave-id)
+  t) (if (not (buffer-live-p buffer)) (progn
+  (hive-claude-state-remove-session slave-id)
+  t) (if (not (hive-claude-bridge--valid-kill-target-p buffer slave-id)) (progn
+  (message "[hive-claude] BLOCKED: safety validation failed for %s" slave-id)
+  (hive-claude-state-remove-session slave-id)
+  nil) (progn
+  (with-current-buffer buffer
     (set-buffer-modified-p nil)
-    (let* ((temp__5823__auto__ (get-buffer-process buffer)))
-    (when temp__5823__auto__ (progn
-  (let* ((proc temp__5823__auto__))
-    (set-process-query-on-exit-flag proc nil)))))
+    (when-let ((proc (get-buffer-process buffer)))
+    (set-process-query-on-exit-flag proc nil))
     (when (and (boundp 'vterm--process) vterm--process (process-live-p vterm--process))
-    (set-process-query-on-exit-flag vterm--process nil))) (let* ((kill-buffer-query-functions nil)
+    (set-process-query-on-exit-flag vterm--process nil)))
+  (let* ((kill-buffer-query-functions nil)
         (kill-buffer-hook nil)
         (vterm-exit-functions nil))
-    (kill-buffer buffer)) (hive-claude-state-remove-session slave-id) (message "[hive-claude] Killed %s" slave-id) t))))))))
+    (kill-buffer buffer))
+  (hive-claude-state-remove-session slave-id)
+  (message "[hive-claude] Killed %s" slave-id)
+  t))))))))
 
 (defun hive-claude-bridge-status (slave-id)
   "Return status plist for SLAVE-ID."
@@ -177,8 +211,11 @@
         (terminal (or (hive-claude-state-get-field slave-id :terminal) hive-claude-bridge-default-terminal)))
     (when (and buffer (buffer-live-p buffer))
     (with-current-buffer buffer
-    (pcase terminal ('vterm (vterm-send-key "c" nil nil t)) ('eat (when (and (boundp 'eat-terminal) eat-terminal)
-    (eat-term-send-string eat-terminal "\\C-c"))) ('claude-code-ide (when (fboundp 'claude-code-ide--terminal-send-string)
+    (pcase terminal
+  ((quote vterm) (vterm-send-key "c" nil nil t))
+  ((quote eat) (when (and (boundp 'eat-terminal) eat-terminal)
+    (eat-term-send-string eat-terminal "\\C-c")))
+  ((quote claude-code-ide) (when (fboundp 'claude-code-ide--terminal-send-string)
     (vterm-send-key "c" nil nil t)))))
     (hive-claude-state-put-field slave-id :status 'idle)
     (list :interrupted t :slave-id slave-id))))

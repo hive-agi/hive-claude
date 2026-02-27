@@ -19,6 +19,7 @@
      (init-as-addon!)"
   (:require [hive-claude.terminal :as terminal]
             [hive-claude.log :as log]
+            [hive-dsl.result :as r]
             [clojure.java.io :as io]
             [clojure.string :as str]))
 
@@ -70,13 +71,18 @@
               (do (log/warn "Failed to inject hive-claude load-path:" (:error lp-result))
                   false)
               ;; Require features in dependency order
-              (let [features ["hive-claude-config" "hive-claude-state" "hive-claude-bridge"]
+              (let [features ["hive-claude-config" "hive-claude-state" "hive-claude-bridge" "hive-claude-sync"]
                     require-elisp (format "(progn %s t)"
                                           (str/join " "
                                                     (map #(format "(require '%s)" %) features)))
                     req-result (eval-fn require-elisp 5000)]
                 (if (:success req-result)
                   (do (log/info "hive-claude elisp loaded into Emacs" {:features features})
+                      ;; Register hivemind sync hooks
+                      (let [hook-result (eval-fn "(hive-claude-sync-register-hooks-bang)" 3000)]
+                        (if (:success hook-result)
+                          (log/info "hive-claude sync hooks registered")
+                          (log/warn "Failed to register sync hooks:" (:error hook-result))))
                       true)
                   (do (log/warn "Failed to load hive-claude elisp:" (:error req-result))
                       false))))))))))
@@ -162,6 +168,10 @@
 
         (shutdown! [_]
           (when (:initialized? @state)
+            ;; Unregister sync hooks
+            (r/guard Exception nil
+                     (when-let [eval-fn (try-resolve 'hive-mcp.emacs.client/eval-elisp-with-timeout)]
+                       (eval-fn "(hive-claude-sync-unregister-hooks-bang)" 3000)))
             ;; Deregister terminal
             (when-let [dereg-fn (try-resolve 'hive-mcp.agent.ling.terminal-registry/deregister-terminal!)]
               (dereg-fn :claude))

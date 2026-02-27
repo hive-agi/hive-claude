@@ -1,5 +1,6 @@
 {:paths ["src/cljel" "src/clj" "resources"]
  :deps {io.github.lages/clojure-elisp {:local/root "/home/lages/PP/clojure-elisp"}
+        io.github.lages/hive-dsl {:local/root "/home/lages/PP/hive/hive-dsl"}
         org.clojure/clojure {:mvn/version "1.12.0"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
         cheshire/cheshire {:mvn/version "6.1.0"}
