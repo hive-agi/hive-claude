@@ -1,6 +1,6 @@
 {:paths ["src/cljel" "src/clj" "resources"]
- :deps {io.github.lages/clojure-elisp {:local/root "/home/lages/PP/clojure-elisp"}
-        io.github.lages/hive-dsl {:local/root "/home/lages/PP/hive/hive-dsl"}
+ :deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}
+        io.github.hive-agi/hive-dsl {:git/tag "v0.3.7" :git/sha "d5deced"}
         org.clojure/clojure {:mvn/version "1.12.0"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
         cheshire/cheshire {:mvn/version "6.1.0"}
@@ -9,7 +9,7 @@
         org.clojure/core.async {:mvn/version "1.7.701"}
         org.clojure/data.json {:mvn/version "2.5.1"}}
  :aliases
- {:build {:extra-deps {io.github.lages/clojure-elisp {:local/root "/home/lages/PP/clojure-elisp"}}
+ {:build {:extra-deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}}
           :main-opts ["-m" "clojure-elisp.core"]}
   :test {:extra-paths ["test"]
          :extra-deps {lambdaisland/kaocha {:mvn/version "1.91.1392"}
