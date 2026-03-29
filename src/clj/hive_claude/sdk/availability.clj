@@ -22,10 +22,10 @@
   []
   (try
     (let [py-fn (requiring-resolve 'libpython-clj2.python/run-simple-string)]
-      (py-fn "import claude_code_sdk")
+      (py-fn "import claude_agent_sdk")
       true)
     (catch Exception _
-      (log/debug "[sdk.availability] claude-code-sdk Python package not found")
+      (log/debug "[sdk.availability] claude-agent-sdk Python package not found")
       false)))
 
 (defn sdk-status
@@ -39,8 +39,8 @@
 
                    :else
                    (try
-                     (let [init! (requiring-resolve 'libpython-clj2.python/initialize!)]
-                       (init!)
+                     (let [ensure! (requiring-resolve 'hive-agent-bridge.python.bridge/ensure-python!)]
+                       (ensure!)
                        (if (check-sdk-available?)
                          :available
                          :no-sdk))

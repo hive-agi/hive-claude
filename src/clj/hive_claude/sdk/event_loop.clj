@@ -35,7 +35,7 @@
   (let [client-var (str "_hive_client_" safe-id)]
     (py/py-set-global! "_hive_spawn_options" options-obj)
     (py/py-run (str "import asyncio\n"
-                    "from claude_code_sdk import ClaudeSDKClient\n"
+                    "from claude_agent_sdk import ClaudeSDKClient\n"
                     "\n"
                     "async def _hive_connect_" safe-id "():\n"
                     "    client = ClaudeSDKClient(options=_hive_spawn_options)\n"

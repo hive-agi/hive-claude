@@ -1,10 +1,16 @@
 (ns hive-claude.headless.sdk-backend
-  "Claude SDK headless backend implementing IHeadlessBackend + optional capability protocols.
+  "DEPRECATED — Dead code. The :claude-sdk headless backend is now provided by
+   hive-agent-bridge.claude.backend (pure Clojure, no libpython-clj).
 
-   Wraps hive-claude.sdk.lifecycle functions (spawn/dispatch/kill/interrupt/status).
-   Declares full capability set including hooks, interrupts, subagents, checkpointing."
+   This file contained the libpython-clj-based SDK backend which was disabled
+   due to SIGSEGV (PyObject_Hash) from GIL management issues with embedded
+   Python asyncio threads. It is no longer loaded by hive-claude.init.
+
+   See: hive-agent-bridge.claude.backend/make-headless-backend"
+  {:deprecated "2026-03-29"}
   (:require [hive-claude.sdk.facade :as sdk]
             [hive-claude.util :refer [try-resolve rescue]]
+            [hive-mcp.addons.headless-caps]
             [taoensso.timbre :as log]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -17,9 +23,16 @@
 
 (defn make-claude-sdk-backend
   "Create a Claude SDK backend implementing IHeadlessBackend + optional caps.
-   Returns nil if the SDK is not available or protocols not on classpath."
+   Returns nil if the SDK is not available or protocols not on classpath.
+
+   DISABLED: Python asyncio threading causes SIGSEGV (PyObject_Hash) inside
+   libpython-clj due to GIL management issues with embedded Python threads.
+   Falls through to :claude-process backend. Re-enable when libpython-clj
+   GIL interop with asyncio event loops is resolved."
   []
-  (when-let [headless-proto-ns (try-resolve 'hive-mcp.addons.headless/IHeadlessBackend)]
+  (log/debug "[sdk-backend] :claude-sdk disabled — libpython-clj asyncio SIGSEGV, using :claude-process")
+  nil
+  #_(when-let [headless-proto-ns (try-resolve 'hive-mcp.addons.headless/IHeadlessBackend)]
     (when (sdk/available?)
       (let [guards-fn (fn []
                         (when-let [f (try-resolve 'hive-mcp.server.guards/child-ling-env)]

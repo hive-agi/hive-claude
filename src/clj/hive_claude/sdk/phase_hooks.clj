@@ -17,7 +17,7 @@
 (defn- sdk-module
   "Import claude_code_sdk module."
   []
-  (py/py-import "claude_code_sdk"))
+  (py/py-import "claude_agent_sdk"))
 
 (defn- saa-hooks-module
   "Import claude_agent_sdk.saa_hooks module."
@@ -110,9 +110,9 @@
      {} agents)))
 
 (defn agent-options
-  "Create a ClaudeCodeOptions Python object from a Clojure options map."
+  "Create a ClaudeAgentOptions Python object from a Clojure options map."
   [opts-map]
-  (let [opts-class (py/py-attr (sdk-module) "ClaudeCodeOptions")
+  (let [opts-class (py/py-attr (sdk-module) "ClaudeAgentOptions")
         clean-opts (dissoc opts-map :agents)]
     (py/py-call-kw opts-class [] clean-opts)))
 

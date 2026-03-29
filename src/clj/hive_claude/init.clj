@@ -4,10 +4,10 @@
    Follows the vterm-mcp exemplar: reify + nil-railway pipeline.
    Zero compile-time hive-mcp dependencies — all resolved via requiring-resolve.
 
-   Registers BOTH:
+   Registers:
    1. :claude terminal backend (existing, via terminal-registry)
-   2. :claude-sdk headless backend (NEW, via headless-registry, when SDK available)
-   3. :claude-process headless backend (NEW, via headless-registry, ProcessBuilder)
+   2. :claude-process headless backend (via headless-registry, ProcessBuilder)
+   NOTE: :claude-sdk headless backend is owned by hive-agent-bridge (pure Clojure).
 
    Elisp loading:
    On initialize!, injects resources/elisp/ into Emacs load-path and requires
@@ -21,7 +21,8 @@
             [hive-claude.log :as log]
             [hive-dsl.result :as r]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [clojure.set :as set]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -128,20 +129,10 @@
                       (swap! registered-ids conj :claude)
                       (log/info "hive-claude: :claude terminal registered")))))
 
-              ;; 2. Headless SDK backend (when Python SDK available)
+              ;; 2. Headless Process backend (ProcessBuilder)
+              ;; NOTE: :claude-sdk is now owned by hive-agent-bridge (pure Clojure,
+              ;; no libpython-clj). hive-claude only owns :claude-process.
               (when-let [reg-fn (try-resolve 'hive-mcp.agent.ling.headless-registry/register-headless!)]
-                (try
-                  (require 'hive-claude.headless.sdk-backend)
-                  (when-let [make-fn (try-resolve 'hive-claude.headless.sdk-backend/make-claude-sdk-backend)]
-                    (when-let [sdk-backend (make-fn)]
-                      (let [result (reg-fn :claude-sdk sdk-backend)]
-                        (when (:registered? result)
-                          (swap! registered-ids conj :claude-sdk)
-                          (log/info "hive-claude: :claude-sdk headless registered")))))
-                  (catch Exception e
-                    (log/debug "SDK backend not available" {:error (ex-message e)})))
-
-                ;; 3. Headless Process backend (ProcessBuilder)
                 (try
                   (require 'hive-claude.headless.process-backend)
                   (when-let [make-fn (try-resolve 'hive-claude.headless.process-backend/make-claude-process-backend)]
@@ -152,6 +143,17 @@
                           (log/info "hive-claude: :claude-process headless registered")))))
                   (catch Exception e
                     (log/debug "Process backend not available" {:error (ex-message e)}))))
+
+              ;; 3. Reconcile: deregister stale headless entries from previous sessions
+              ;; Only :claude-process — :claude-sdk is owned by hive-agent-bridge
+              (let [owned-ids #{:claude-process}
+                    live-ids  (set (filter owned-ids @registered-ids))
+                    stale-ids (set/difference owned-ids live-ids)]
+                (when (seq stale-ids)
+                  (when-let [dereg-fn (try-resolve 'hive-mcp.agent.ling.headless-registry/deregister-headless!)]
+                    (doseq [sid stale-ids]
+                      (dereg-fn sid)
+                      (log/info "hive-claude: cleaned stale headless entry" {:headless-id sid})))))
 
               (let [ids @registered-ids]
                 (if (seq ids)
@@ -175,9 +177,9 @@
             ;; Deregister terminal
             (when-let [dereg-fn (try-resolve 'hive-mcp.agent.ling.terminal-registry/deregister-terminal!)]
               (dereg-fn :claude))
-            ;; Deregister headless backends
+            ;; Deregister headless backends (only those we own)
             (when-let [dereg-fn (try-resolve 'hive-mcp.agent.ling.headless-registry/deregister-headless!)]
-              (doseq [id (filter #{:claude-sdk :claude-process} (:registered-ids @state))]
+              (doseq [id (filter #{:claude-process} (:registered-ids @state))]
                 (dereg-fn id)))
             (reset! state {:initialized? false})
             (log/info "hive-claude addon shut down" {:deregistered (:registered-ids @state)}))
