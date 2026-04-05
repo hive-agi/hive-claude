@@ -3,7 +3,7 @@
         io.github.hive-agi/hive-dsl {:git/tag "v0.3.7" :git/sha "d5deced"}
         org.clojure/clojure {:mvn/version "1.12.0"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
-        cheshire/cheshire {:mvn/version "6.1.0"}
+        cheshire/cheshire {:mvn/version "6.2.0"}
         ;; SDK dependencies (loaded lazily via requiring-resolve)
         clj-python/libpython-clj {:mvn/version "2.027"}
         org.clojure/core.async {:mvn/version "1.7.701"}

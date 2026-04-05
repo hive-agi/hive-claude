@@ -107,10 +107,11 @@
     (catch Exception _
       false)))
 
-(defn- ensure-elisp-loaded!
+(defn ensure-elisp-loaded!
   "Ensure hive-claude elisp features are loaded in Emacs.
    Reconnect-aware: detects Emacs restart and reloads features.
-   Idempotent — fast path skips reload when features are present."
+   Idempotent — fast path skips reload when features are present.
+   Public so terminal.clj can call via requiring-resolve before bridge evals."
   []
   (when-let [eval-fn (try-resolve 'hive-mcp.emacs.client/eval-elisp-with-timeout)]
     (if (and (:loaded? @elisp-load-state)

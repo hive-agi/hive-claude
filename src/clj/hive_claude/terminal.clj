@@ -60,6 +60,18 @@
   (if (string? s) (elisp/escape-for-elisp s) ""))
 
 ;; =============================================================================
+;; Elisp Bridge Guard
+;; =============================================================================
+
+(defn- ensure-bridge-loaded!
+  "Ensure hive-claude elisp features are loaded in Emacs before bridge calls.
+   Delegates to hive-claude.init/ensure-elisp-loaded! via requiring-resolve
+   to avoid circular compile-time dependency (init requires terminal)."
+  []
+  (when-let [ensure-fn (try-resolve 'hive-claude.init/ensure-elisp-loaded!)]
+    (ensure-fn)))
+
+;; =============================================================================
 ;; Spawn Context Helper
 ;; =============================================================================
 
@@ -102,6 +114,7 @@
       (terminal-id [_] :claude)
 
       (terminal-spawn! [_ ctx opts]
+        (ensure-bridge-loaded!)
         (let [{:keys [id cwd presets]} ctx
               {:keys [task]} opts
               ctx-file (when task (spawn-context-file cwd))
@@ -124,6 +137,7 @@
                             {:id id :error error})))))
 
       (terminal-dispatch! [_ ctx task-opts]
+        (ensure-bridge-loaded!)
         (let [{:keys [id]} ctx
               {:keys [task]} task-opts
               elisp (format "(json-encode (hive-claude-bridge-api-dispatch \"%s\" \"%s\"))"
@@ -137,6 +151,7 @@
                             {:ling-id id :error error})))))
 
       (terminal-status [_ ctx ds-status]
+        (ensure-bridge-loaded!)
         (let [{:keys [id]} ctx
               elisp (format "(json-encode (hive-claude-bridge-api-status \"%s\"))"
                             (escape id))
@@ -150,6 +165,7 @@
             ds-status)))
 
       (terminal-kill! [_ ctx]
+        (ensure-bridge-loaded!)
         (let [{:keys [id]} ctx
               elisp (format "(json-encode (hive-claude-bridge-api-kill \"%s\"))"
                             (escape id))
@@ -161,6 +177,7 @@
             {:killed? false :id id :reason :elisp-error :error error})))
 
       (terminal-interrupt! [_ ctx]
+        (ensure-bridge-loaded!)
         (let [{:keys [id]} ctx
               elisp (format "(json-encode (hive-claude-bridge-api-interrupt \"%s\"))"
                             (escape id))
