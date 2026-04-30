@@ -12,16 +12,18 @@
    Elisp loading:
    On initialize!, injects resources/elisp/ into Emacs load-path and requires
    hive-claude-config, hive-claude-state, hive-claude-bridge (in dependency order).
-   Follows the lsp-mcp exemplar for load-path injection.
+   Follows the lsp-mcp exemplar for load-path injection. The
+   session-fingerprinted reload cache lives in
+   `hive-claude.elisp-load-state` — split out so the cache can be exercised
+   without pulling hive-mcp.addons.* onto the test classpath.
 
    Usage:
      ;; Via addon system (auto-discovered from META-INF manifest):
      (init-as-addon!)"
   (:require [hive-claude.terminal :as terminal]
             [hive-claude.log :as log]
+            [hive-claude.elisp-load-state :as els]
             [hive-dsl.result :as r]
-            [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.set :as set]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -38,95 +40,13 @@
   (try (requiring-resolve sym) (catch Exception _ nil)))
 
 ;; =============================================================================
-;; Elisp Load-Path Injection (lsp-mcp exemplar)
+;; Elisp Load State — thin re-exports for backwards compat.
+;; The real implementation lives in hive-claude.elisp-load-state.
 ;; =============================================================================
-;; TODO: Extract this pattern into clojure-elisp runtime as a reusable macro
-;; e.g. (cljel/ensure-elisp-loaded! {:features [...] :marker-resource "..."})
 
-(defn- resolve-elisp-dirs
-  "Locate elisp directories on classpath. Returns vector of dirs to inject.
-   Finds hive-claude's own elisp/ and the clojure-elisp runtime."
-  []
-  (let [dirs (atom [])]
-    ;; hive-claude compiled elisp
-    (when-let [res-url (io/resource "elisp/hive-claude-bridge.el")]
-      (swap! dirs conj (-> (.getPath res-url)
-                           (str/replace #"/hive-claude-bridge\.el$" ""))))
-    ;; clojure-elisp runtime (required by compiled .el files)
-    (when-let [rt-url (io/resource "clojure-elisp/clojure-elisp-runtime.el")]
-      (swap! dirs conj (-> (.getPath rt-url)
-                           (str/replace #"/clojure-elisp-runtime\.el$" ""))))
-    @dirs))
-
-(defonce ^:private elisp-load-state
-  (atom {:loaded? false}))
-
-(def ^:private elisp-features
-  "Features loaded in dependency order: config → state → bridge → sync."
-  ["hive-claude-config" "hive-claude-state" "hive-claude-bridge" "hive-claude-sync"])
-
-(defn- load-elisp-into-emacs!
-  "Inject load-path and require hive-claude features into Emacs.
-   Returns true on success, false on failure."
-  [eval-fn]
-  (let [dirs (resolve-elisp-dirs)]
-    (if-not (seq dirs)
-      (do (log/warn "No hive-claude elisp dirs found on classpath")
-          false)
-      (do
-        (log/debug "Injecting hive-claude elisp load-paths:" dirs)
-        ;; Add all dirs to load-path
-        (let [lp-elisp (format "(progn %s t)"
-                               (str/join " " (map #(format "(add-to-list 'load-path \"%s\")" %) dirs)))
-              lp-result (eval-fn lp-elisp 5000)]
-          (if-not (:success lp-result)
-            (do (log/warn "Failed to inject hive-claude load-path:" (:error lp-result))
-                false)
-            ;; Require features in dependency order
-            (let [require-elisp (format "(progn %s t)"
-                                        (str/join " "
-                                                  (map #(format "(require '%s)" %) elisp-features)))
-                  req-result (eval-fn require-elisp 5000)]
-              (if (:success req-result)
-                (do (log/info "hive-claude elisp loaded into Emacs" {:features elisp-features})
-                    ;; Register hivemind sync hooks
-                    (let [hook-result (eval-fn "(hive-claude-sync-register-hooks-bang)" 3000)]
-                      (if (:success hook-result)
-                        (log/info "hive-claude sync hooks registered")
-                        (log/warn "Failed to register sync hooks:" (:error hook-result))))
-                    true)
-                (do (log/warn "Failed to load hive-claude elisp:" (:error req-result))
-                    false)))))))))
-
-(defn- emacs-has-features?
-  "Fast path: check if Emacs still has hive-claude-bridge loaded.
-   Returns true if feature is present, false if Emacs restarted or unreachable."
-  [eval-fn]
-  (try
-    (:success (eval-fn "(featurep 'hive-claude-bridge)" 2000))
-    (catch Exception _
-      false)))
-
-(defn ensure-elisp-loaded!
-  "Ensure hive-claude elisp features are loaded in Emacs.
-   Reconnect-aware: detects Emacs restart and reloads features.
-   Idempotent — fast path skips reload when features are present.
-   Public so terminal.clj can call via requiring-resolve before bridge evals."
-  []
-  (when-let [eval-fn (try-resolve 'hive-mcp.emacs.client/eval-elisp-with-timeout)]
-    (if (and (:loaded? @elisp-load-state)
-             (emacs-has-features? eval-fn))
-      ;; Fast path — Emacs still has our features
-      true
-      ;; Slow path — first load or Emacs restarted
-      (do
-        (when (:loaded? @elisp-load-state)
-          (log/info "Emacs restarted detected — hive-claude features missing, reloading"))
-        (reset! elisp-load-state {:loaded? false})
-        (let [ok? (load-elisp-into-emacs! eval-fn)]
-          (when ok?
-            (reset! elisp-load-state {:loaded? true}))
-          ok?)))))
+(def reset-elisp-load-state! els/reset-elisp-load-state!)
+(def elisp-loaded?          els/elisp-loaded?)
+(def ensure-elisp-loaded!   els/ensure-elisp-loaded!)
 
 ;; =============================================================================
 ;; IAddon Implementation
@@ -172,7 +92,9 @@
                   (require 'hive-claude.headless.process-backend)
                   (when-let [make-fn (try-resolve 'hive-claude.headless.process-backend/make-claude-process-backend)]
                     (when-let [proc-backend (make-fn)]
-                      (let [result (reg-fn :claude-process proc-backend)]
+                      (let [result (reg-fn :claude-process proc-backend
+                                           {:provides #{:claude}
+                                            :priority 20})]
                         (when (:registered? result)
                           (swap! registered-ids conj :claude-process)
                           (log/info "hive-claude: :claude-process headless registered")))))

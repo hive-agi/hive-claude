@@ -65,10 +65,11 @@
 
 (defn- ensure-bridge-loaded!
   "Ensure hive-claude elisp features are loaded in Emacs before bridge calls.
-   Delegates to hive-claude.init/ensure-elisp-loaded! via requiring-resolve
-   to avoid circular compile-time dependency (init requires terminal)."
+   Delegates to hive-claude.elisp-load-state/ensure-elisp-loaded! via
+   requiring-resolve. (Previously resolved through hive-claude.init; the
+   implementation now lives in the dedicated cache ns.)"
   []
-  (when-let [ensure-fn (try-resolve 'hive-claude.init/ensure-elisp-loaded!)]
+  (when-let [ensure-fn (try-resolve 'hive-claude.elisp-load-state/ensure-elisp-loaded!)]
     (ensure-fn)))
 
 ;; =============================================================================
