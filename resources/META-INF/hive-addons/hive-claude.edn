@@ -1,4 +1,5 @@
 {:addon/id           "hive.claude"
+ :addon/kind         :library
  :addon/type         :native
  :addon/init-ns      "hive-claude.init"
  :addon/init-fn      "init-as-addon!"
