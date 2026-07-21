@@ -223,6 +223,18 @@
       (log/debug "IAddon unavailable — hive-claude addon registration failed")
       {:registered [] :total 0})))
 
+(defn addon-ctor
+  "Pure constructor for the `hive.claude` IAddon — (config -> IAddon | nil).
+   Resolved by the hive-addon.mount composer via :addon/init-fn; the host then
+   drives register!/initialize!. Returns the same reify the legacy init-as-addon!
+   path constructs (via make-addon), with NO registration/elisp/backend side
+   effects — those run in initialize!. Returns nil when the IAddon protocol is
+   absent from the classpath (graceful). Tolerates (ignores) mounter-injected
+   config keys such as :mount/dependencies. Additive: init-as-addon! remains for
+   the current hive-mcp loader."
+  [_config]
+  (make-addon))
+
 (defn get-addon-instance
   "Return the current IAddon instance, or nil."
   []

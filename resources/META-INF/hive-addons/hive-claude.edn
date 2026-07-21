@@ -2,6 +2,6 @@
  :addon/kind         :library
  :addon/type         :native
  :addon/init-ns      "hive-claude.init"
- :addon/init-fn      "init-as-addon!"
+ :addon/init-fn      "addon-ctor"
  :addon/capabilities #{:terminal :headless :health-reporting}
  :addon/description  "Claude Code provider — terminal + :claude-process headless backend"}
