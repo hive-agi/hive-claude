@@ -9,9 +9,8 @@
         org.clojure/core.async {:mvn/version "1.7.701"}
         org.clojure/data.json {:mvn/version "2.5.1"}}
  :aliases
- {:build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.9"}
-                  slipset/deps-deploy {:mvn/version "0.2.2"}}
-          :ns-default build}
+ {:build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.0"}}
+          :ns-default hive-build.api}
   :cljel {:extra-deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}}
           :main-opts ["-m" "clojure-elisp.core"]}
   :test {:extra-paths ["test"]
