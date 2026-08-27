@@ -2,4 +2,5 @@
  :parent "hive"
  :description "Claude Code terminal backend — hybrid cljel + JVM addon for hive-mcp. Emacs-side bridge (cljel) + JVM ITerminalAddon registered as :claude"
  :language :clojure
- :tags ["claude" "emacs" "cljel" "terminal-addon" "ling" "addon" "hybrid"]}
+ :tags ["claude" "emacs" "cljel" "terminal-addon" "ling" "addon" "hybrid"] 
+ :carto {:source-roots ["resources" "src" "src/clj" "src/cljel" "test"]}}
