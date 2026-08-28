@@ -24,7 +24,9 @@
             [hive-claude.log :as log]
             [hive-claude.elisp-load-state :as els]
             [hive-dsl.result :as r]
-            [clojure.set :as set]))
+            [clojure.set :as set]
+            [hive-claude.guard.projection :as guard-projection]
+            [hive-spi.guard.ports :as gp]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -145,6 +147,14 @@
         (tools [_] [])
 
         (schema-extensions [_] {})
+
+        (hooks [_]
+          ;; The guard projection for :claude-code, published as inert data. The
+          ;; host files it in its extension registry like any hook and the guard
+          ;; sweeps that key namespace, so this addon and hive.guard can mount in
+          ;; either order. The VAR, not its value — see the var's own docstring.
+          {(gp/projection-ext-key guard-projection/harness)
+           #'guard-projection/instance})
 
         (health [_]
           (if (:initialized? @state)

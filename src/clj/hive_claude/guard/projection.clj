@@ -298,3 +298,12 @@
   "Construct the `ClaudeProjection`."
   []
   (->ClaudeProjection))
+
+(defonce ^{:doc "The single `ClaudeProjection` this library publishes to the guard.
+
+   The record is stateless, so one instance is the whole vendor surface. The
+   addon publishes THIS VAR under `(gp/projection-ext-key harness)`; the guard
+   sweeps that key namespace and adopts whatever it finds, which is why nothing
+   here has to know when — or whether — the guard mounted."}
+  instance
+  (make-projection))
