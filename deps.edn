@@ -1,6 +1,7 @@
 {:paths ["src/cljel" "src/clj" "resources"]
  :deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}
         io.github.hive-agi/hive-dsl {:mvn/version "0.5.17"}
+        io.github.hive-agi/hive-spi {:mvn/version "0.2.0"}
         org.clojure/clojure {:mvn/version "1.12.5"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
         cheshire/cheshire {:mvn/version "6.2.0"}
