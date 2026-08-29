@@ -205,3 +205,30 @@
   (let [script (-> (gp/render-config proj rule-set) :files first :content)]
     (is (str/includes? script "2 rule(s)"))
     (is (str/includes? script "PreToolUse"))))
+
+(deftest a-provenance-that-would-corrupt-the-script-is-refused
+  (testing "a newline ends the ;; comment and leaves the rest as code"
+    (let [ex (try (p/dispatcher-script "line one\n(System/exit 1)")
+                  (catch Exception e e))]
+      (is (instance? clojure.lang.ExceptionInfo ex))
+      (is (= :guard/invalid-provenance (:error (ex-data ex))))))
+  (testing "and the rule SET is not a provenance, however plausible it looks"
+    ;; Passing rule-set here would inline every rule into the header of a file
+    ;; whose next line says it carries none — the copy that rots.
+    (let [ex (try (p/dispatcher-script rule-set) (catch Exception e e))]
+      (is (instance? clojure.lang.ExceptionInfo ex))
+      (is (= :guard/invalid-provenance (:error (ex-data ex))))))
+  (testing "a one-line summary is accepted and lands in the header"
+    (let [script (p/dispatcher-script "Generated from 2 rule(s).")]
+      (is (str/includes? script ";; Generated from 2 rule(s)."))
+      (is (str/includes? script "carries NO rules")))))
+
+(deftest every-line-of-the-header-is-a-comment
+  (testing "nothing above the first form can be read as code"
+    (let [script (-> (gp/render-config proj rule-set) :files first :content)
+          header (take-while #(not (str/starts-with? % "(")) (str/split-lines script))]
+      (doseq [line header]
+        (is (or (str/blank? line)
+                (str/starts-with? line ";;")
+                (str/starts-with? line "#!"))
+            (str "header line is not a comment: " (pr-str line)))))))
