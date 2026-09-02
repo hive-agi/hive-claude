@@ -26,7 +26,8 @@
             [hive-dsl.result :as r]
             [clojure.set :as set]
             [hive-claude.guard.projection :as guard-projection]
-            [hive-spi.guard.ports :as gp]))
+            [hive-spi.guard.ports :as gp]
+            [hive-claude.util :as util]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -36,10 +37,10 @@
 ;; Resolution Helpers
 ;; =============================================================================
 
-(defn- try-resolve
-  "Attempt to resolve a fully-qualified symbol. Returns var or nil."
-  [sym]
-  (try (requiring-resolve sym) (catch Exception _ nil)))
+(def ^:private try-resolve
+  "Attempt to resolve a fully-qualified symbol. Returns var or nil.
+   Alias of hive-claude.util/try-resolve, this repo's single copy."
+  util/try-resolve)
 
 ;; =============================================================================
 ;; Elisp Load State — thin re-exports for backwards compat.

@@ -14,7 +14,8 @@
    (zero compile-time coupling)."
   (:require [hive-claude.elisp :as elisp]
             [hive-claude.log :as log]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [hive-claude.util :as util]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -24,10 +25,10 @@
 ;; Runtime Resolution
 ;; =============================================================================
 
-(defn- try-resolve
-  "Attempt to resolve a fully-qualified symbol. Returns var or nil."
-  [sym]
-  (try (requiring-resolve sym) (catch Exception _ nil)))
+(def ^:private try-resolve
+  "Attempt to resolve a fully-qualified symbol. Returns var or nil.
+   Alias of hive-claude.util/try-resolve, this repo's single copy."
+  util/try-resolve)
 
 (defn- eval-elisp!
   "Resolve and call hive-mcp.emacs.client/eval-elisp-with-timeout.
