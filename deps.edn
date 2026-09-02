@@ -1,5 +1,9 @@
 {:paths ["src/cljel" "src/clj" "resources"]
  :deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}
+        ;; hive-addon: the IAddon contract this addon implements. Depending on
+        ;; the contract lib rather than on a host namespace is what lets any
+        ;; host, hive-mcp or not, mount this jar.
+        io.github.hive-agi/hive-addon {:mvn/version "0.3.10"}
         io.github.hive-agi/hive-dsl {:mvn/version "0.5.20"}
         io.github.hive-agi/hive-spi {:mvn/version "0.2.0"}
         org.clojure/clojure {:mvn/version "1.12.5"}
