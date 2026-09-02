@@ -3,9 +3,13 @@
         ;; hive-addon: the IAddon contract this addon implements. Depending on
         ;; the contract lib rather than on a host namespace is what lets any
         ;; host, hive-mcp or not, mount this jar.
-        io.github.hive-agi/hive-addon {:mvn/version "0.3.10"}
+        ;; Floor 0.3.12: first release carrying hive-addon.terminal and
+        ;; hive-addon.vessel, the companion contracts this addon reifies.
+        io.github.hive-agi/hive-addon {:mvn/version "0.3.12"}
         io.github.hive-agi/hive-dsl {:mvn/version "0.5.20"}
-        io.github.hive-agi/hive-spi {:mvn/version "0.2.0"}
+        ;; Floor 0.2.1: hive-claude.init compiles against
+        ;; hive-spi.guard.ports/projection-ext-key, which 0.2.0 does not carry.
+        io.github.hive-agi/hive-spi {:mvn/version "0.2.1"}
         org.clojure/clojure {:mvn/version "1.12.5"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
         cheshire/cheshire {:mvn/version "6.2.0"}

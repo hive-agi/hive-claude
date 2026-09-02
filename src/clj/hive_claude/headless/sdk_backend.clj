@@ -10,7 +10,6 @@
   {:deprecated "2026-03-29"}
   (:require [hive-claude.sdk.facade :as sdk]
             [hive-claude.util :refer [try-resolve rescue]]
-            [hive-mcp.addons.headless-caps]
             [taoensso.timbre :as log]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
