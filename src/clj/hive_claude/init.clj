@@ -27,7 +27,8 @@
             [clojure.set :as set]
             [hive-claude.guard.projection :as guard-projection]
             [hive-spi.guard.ports :as gp]
-            [hive-claude.util :as util]))
+            [hive-claude.util :as util]
+            [hive-addon.protocol :as addon-proto]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -64,8 +65,7 @@
   (when (try-resolve 'hive-mcp.addons.protocol/IAddon)
     (let [state (atom {:initialized? false})]
       (reify
-        hive-mcp.addons.protocol/IAddon
-
+        addon-proto/IAddon
         (addon-id [_] "hive.claude")
 
         (addon-type [_] :native)

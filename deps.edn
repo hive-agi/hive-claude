@@ -2,6 +2,13 @@
  :deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}
         io.github.hive-agi/hive-dsl {:mvn/version "0.5.20"}
         io.github.hive-agi/hive-spi {:mvn/version "0.2.0"}
+
+        ;; hive-addon: IAddon and ITerminalAddon, the protocols this addon
+        ;; implements. Taken as a real dependency because reify resolves a
+        ;; protocol at COMPILE time: reifying the host's copy of a protocol
+        ;; makes this jar unloadable wherever hive-mcp is absent, which is
+        ;; everywhere it is fetched from maven. Axiom 20260727002436-53e3767e.
+        io.github.hive-agi/hive-addon {:mvn/version "0.3.12"}
         org.clojure/clojure {:mvn/version "1.12.5"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
         cheshire/cheshire {:mvn/version "6.2.0"}

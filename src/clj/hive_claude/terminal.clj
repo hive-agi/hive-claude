@@ -15,7 +15,8 @@
   (:require [hive-claude.elisp :as elisp]
             [hive-claude.log :as log]
             [clojure.string :as str]
-            [hive-claude.util :as util]))
+            [hive-claude.util :as util]
+            [hive-addon.terminal :as addon-term]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -111,8 +112,7 @@
   []
   (when (try-resolve 'hive-mcp.addons.terminal/ITerminalAddon)
     (reify
-      hive-mcp.addons.terminal/ITerminalAddon
-
+      addon-term/ITerminalAddon
       (terminal-id [_] :claude)
 
       (terminal-spawn! [_ ctx opts]
