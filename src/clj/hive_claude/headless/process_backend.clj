@@ -6,6 +6,7 @@
    headless-interrupt! returns {:success? false :reason :not-supported}."
   (:require [hive-claude.headless.process :as process]
             [hive-claude.util :refer [try-resolve rescue]]
+            [hive-spi.addon.headless :as headless]
             [taoensso.timbre :as log]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
@@ -53,13 +54,11 @@
 
 (defn make-claude-process-backend
   "Create a ProcessBuilder backend implementing IHeadlessBackend.
-   Returns nil if the headless process module is not available or
-   protocols not on classpath."
+   Returns nil when the headless process module is not available."
   []
-  (when (try-resolve 'hive-mcp.addons.headless/IHeadlessBackend)
-    (when (process/available?)
+  (when (process/available?)
       (reify
-        hive-mcp.addons.headless/IHeadlessBackend
+        headless/IHeadlessBackend
 
         (headless-id [_] :claude-process)
 
@@ -124,7 +123,7 @@
              :reason :not-supported
              :errors ["Interrupt not supported for headless (ProcessBuilder) spawn mode"]}))
 
-        hive-mcp.addons.headless/IHeadlessCapabilities
+        headless/IHeadlessCapabilities
 
         (declared-capabilities [_]
-          #{:cap/streaming :cap/multi-turn})))))
+          #{:cap/streaming :cap/multi-turn}))))
