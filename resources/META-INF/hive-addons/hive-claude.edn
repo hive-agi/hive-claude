@@ -4,4 +4,6 @@
  :addon/init-ns      "hive-claude.init"
  :addon/init-fn      "addon-ctor"
  :addon/capabilities #{:terminal :headless :health-reporting}
- :addon/description  "Claude Code provider — terminal + :claude-process headless backend"}
+ :addon/description  "Claude Code provider — terminal + :claude-process headless backend"
+ :addon/maturity :stable
+ :addon/trust-class :foss}
