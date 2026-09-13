@@ -1,6 +1,6 @@
 {:paths ["src/cljel" "src/clj" "resources"]
  :deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}
-        io.github.hive-agi/hive-dsl {:mvn/version "0.5.23"}
+        io.github.hive-agi/hive-dsl {:mvn/version "0.5.24"}
         io.github.hive-agi/hive-spi {:mvn/version "1.1.0"}
 
         ;; hive-addon: IAddon and ITerminalAddon, the protocols this addon
@@ -17,7 +17,7 @@
         org.clojure/core.async {:mvn/version "1.9.865"}
         org.clojure/data.json {:mvn/version "2.5.2"}}
  :aliases
- {:build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.14"}}
+ {:build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.15"}}
           :ns-default hive-build.api}
   :cljel {:extra-deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}}
           :main-opts ["-m" "clojure-elisp.core"]}
