@@ -38,10 +38,10 @@
     ;; Prime the cache by calling sdk-status with mocked fns
     (with-redefs [avail/check-libpython-available? (constantly true)
                   avail/check-sdk-available?       (constantly true)]
-      ;; Also mock requiring-resolve for the initialize! call inside sdk-status
+      ;; Also mock requiring-resolve for the ensure-python! resolve inside sdk-status
       (let [orig-rr requiring-resolve]
         (with-redefs [requiring-resolve (fn [sym]
-                                          (if (= sym 'libpython-clj2.python/initialize!)
+                                          (if (= sym 'hive-agent-bridge.python.bridge/ensure-python!)
                                             (fn [] nil)
                                             (orig-rr sym)))]
           (is (= :available (avail/sdk-status)) "Should be available with mocks"))))
@@ -66,7 +66,7 @@
     (with-redefs [avail/check-libpython-available? (constantly true)
                   avail/check-sdk-available?       (constantly true)
                   requiring-resolve                (fn [sym]
-                                                     (when (= sym 'libpython-clj2.python/initialize!)
+                                                     (when (= sym 'hive-agent-bridge.python.bridge/ensure-python!)
                                                        (fn [] nil)))]
       (is (= :available (avail/sdk-status))))))
 
@@ -75,7 +75,7 @@
     (with-redefs [avail/check-libpython-available? (constantly true)
                   avail/check-sdk-available?       (constantly false)
                   requiring-resolve                (fn [sym]
-                                                     (when (= sym 'libpython-clj2.python/initialize!)
+                                                     (when (= sym 'hive-agent-bridge.python.bridge/ensure-python!)
                                                        (fn [] nil)))]
       (is (= :no-sdk (avail/sdk-status))))))
 
@@ -83,7 +83,7 @@
   (testing "returns :not-initialized when Python init fails"
     (with-redefs [avail/check-libpython-available? (constantly true)
                   requiring-resolve                (fn [sym]
-                                                     (when (= sym 'libpython-clj2.python/initialize!)
+                                                     (when (= sym 'hive-agent-bridge.python.bridge/ensure-python!)
                                                        (fn [] (throw (Exception. "Python init failed")))))]
       (is (= :not-initialized (avail/sdk-status))))))
 
@@ -185,7 +185,7 @@
                   avail/check-sdk-available?       (constantly true)
                   requiring-resolve                (fn [sym]
                                                      (case sym
-                                                       libpython-clj2.python/initialize! (fn [] nil)
+                                                       hive-agent-bridge.python.bridge/ensure-python! (fn [] nil)
                                                        nil))]
       (let [status (avail/sdk-status)]
         (is (= :available status))
@@ -204,7 +204,7 @@
                   avail/check-sdk-available?       (constantly false)
                   requiring-resolve                (fn [sym]
                                                      (case sym
-                                                       libpython-clj2.python/initialize! (fn [] nil)
+                                                       hive-agent-bridge.python.bridge/ensure-python! (fn [] nil)
                                                        nil))]
       (let [status (avail/sdk-status)]
         (is (= :no-sdk status))
@@ -215,7 +215,7 @@
     (with-redefs [avail/check-libpython-available? (constantly true)
                   requiring-resolve                (fn [sym]
                                                      (case sym
-                                                       libpython-clj2.python/initialize!
+                                                       hive-agent-bridge.python.bridge/ensure-python!
                                                        (fn [] (throw (RuntimeException. "segfault")))
                                                        nil))]
       (let [status (avail/sdk-status)]
@@ -234,7 +234,7 @@
                   avail/check-sdk-available?       (constantly true)
                   requiring-resolve                (fn [sym]
                                                      (case sym
-                                                       libpython-clj2.python/initialize! (fn [] nil)
+                                                       hive-agent-bridge.python.bridge/ensure-python! (fn [] nil)
                                                        nil))]
       (is (= :available (avail/sdk-status))
           "After reset, fresh check should reflect new state"))))
