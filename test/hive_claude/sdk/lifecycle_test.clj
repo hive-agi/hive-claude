@@ -153,12 +153,14 @@
          "my-ling-123" {:cwd "/projects/test"
                         :system-prompt "do stuff"
                         :agents {:helper {:description "helps"}}})
-        ;; ling-id->safe-id converts "my-ling-123" to "my_ling_123"
+        ;; Check only the keys spawn means to wire through; the deps map may
+        ;; carry more keys (e.g. :env, :mcp-servers) that this test does not
+        ;; care about.
         (is (= "my_ling_123" @start-loop-args))
         (is (= {:cwd "/projects/test"
                 :system-prompt "do stuff"
                 :agents {:helper {:description "helps"}}}
-               @build-opts-args))
+               (select-keys @build-opts-args [:cwd :system-prompt :agents])))
         (is (= "my_ling_123" (:safe-id @connect-args)))
         (is (= :test-options (:opts @connect-args)))
         (is (= "test-loop" (:loop-var @connect-args)))))))

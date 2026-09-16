@@ -139,7 +139,22 @@
 ;;; ===========================================================================
 
 (deftest render-config-writes-nothing-and-returns-content
-  (let [{:keys [files settings-block notes]} (gp/render-config proj rule-set)
+  ;; render-config is a pure projection: it must not create or modify
+  ;; anything on disk. The paths are only knowable from render's return
+  ;; value, so render once to learn them, snapshot the host state, render
+  ;; again and compare. Comparing before vs after means a file that was
+  ;; already on this machine (e.g. a really-installed guard) is not held
+  ;; against the function.
+  (let [home (System/getProperty "user.home")
+        paths (->> (gp/render-config proj rule-set) :files (map :path))
+        snapshot (fn []
+                   (into {}
+                         (map (fn [p]
+                                (let [f (java.io.File. (str/replace p #"^~" home))]
+                                  [p [(.exists f) (.lastModified f)]])))
+                         paths))
+        before (snapshot)
+        {:keys [files settings-block notes]} (gp/render-config proj rule-set)
         script (:content (first files))]
     (is (= 1 (count files)) "one dispatcher, because the payload names its own moment")
     (is (str/ends-with? (:path (first files)) "hive-guard.bb"))
@@ -147,9 +162,10 @@
     (is (string? script))
     (is (seq notes))
     (is (map? settings-block))
-    (doseq [f files]
-      (is (not (.exists (java.io.File. (str/replace (:path f) #"^~" (System/getProperty "user.home")))))
-          "render-config must not have installed anything"))))
+    (let [after (snapshot)]
+      (doseq [p paths]
+        (is (= (before p) (after p))
+            "render-config must not have installed anything")))))
 
 (deftest the-hook-registrations-follow-the-RULE-SET
   (let [events (-> (gp/render-config proj rule-set) :settings-block :hooks keys set)]
