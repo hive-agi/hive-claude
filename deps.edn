@@ -1,6 +1,6 @@
 {:paths ["src/cljel" "src/clj" "resources"]
  :deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}
-        io.github.hive-agi/hive-dsl {:mvn/version "0.5.27"}
+        io.github.hive-agi/hive-dsl {:mvn/version "0.5.28"}
         io.github.hive-agi/hive-spi {:mvn/version "1.1.1"}
 
         ;; hive-addon: IAddon and ITerminalAddon, the protocols this addon
@@ -8,7 +8,7 @@
         ;; protocol at COMPILE time: reifying the host's copy of a protocol
         ;; makes this jar unloadable wherever hive-mcp is absent, which is
         ;; everywhere it is fetched from maven. Axiom 20260727002436-53e3767e.
-        io.github.hive-agi/hive-addon {:mvn/version "1.0.10"}
+        io.github.hive-agi/hive-addon {:mvn/version "1.0.11"}
         org.clojure/clojure {:mvn/version "1.12.6"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
         cheshire/cheshire {:mvn/version "6.2.0"}
@@ -17,7 +17,7 @@
         org.clojure/core.async {:mvn/version "1.9.865"}
         org.clojure/data.json {:mvn/version "2.5.2"}}
  :aliases
- {:build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.17"}}
+ {:build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.18"}}
           :ns-default hive-build.api}
   :cljel {:extra-deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}}
           :main-opts ["-m" "clojure-elisp.core"]}
