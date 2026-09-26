@@ -146,6 +146,14 @@
   (or (phase->event (:guard/phase decision))
       (when (= :deny (:guard/verdict decision)) "PreToolUse")))
 
+(defn- block-text
+  "The reason Claude Code hands the model when a Stop is blocked."
+  [{:guard/keys [reason rule-id citations]}]
+  (str "NOT DONE — the hive guard blocked ending this turn.\n\n" reason
+       (when (seq citations)
+         (str "\n\nStated by: " (str/join ", " citations)))
+       (when rule-id (str "\nRule: " rule-id))))
+
 (defn ->hook-output
   "Claude Code's hook output for `decision`.
 
@@ -153,17 +161,28 @@
    `:warn`  -> additionalContext only; the call proceeds under the user's own
                permission rules, untouched.
    `:allow` -> {} — silence, so nothing the guard says can widen a permission.
+
+   Stop is the exception to the hookSpecificOutput channel: Claude Code reads a
+   Stop hook's TOP-LEVEL `decision`/`reason`. A `:deny` at :stop encodes to
+   `{:decision \"block\"}` — the turn does not end, and the model is handed the
+   reason to act on. A `:warn` at :stop encodes to `systemMessage`, shown to
+   the user, since a Stop has no model-context channel.
    Pure; never throws."
   [decision]
   (if-let [hook-event (hook-event-for decision)]
-    (let [base {:hookEventName hook-event}]
+    (if (= "Stop" hook-event)
       (case (:guard/verdict decision)
-        :deny {:hookSpecificOutput
-               (assoc base :permissionDecision "deny"
-                      :permissionDecisionReason (refusal-text decision))}
-        :warn {:hookSpecificOutput
-               (assoc base :additionalContext (advisory-text decision))}
-        {}))
+        :deny {:decision "block" :reason (block-text decision)}
+        :warn {:systemMessage (advisory-text decision)}
+        {})
+      (let [base {:hookEventName hook-event}]
+        (case (:guard/verdict decision)
+          :deny {:hookSpecificOutput
+                 (assoc base :permissionDecision "deny"
+                        :permissionDecisionReason (refusal-text decision))}
+          :warn {:hookSpecificOutput
+                 (assoc base :additionalContext (advisory-text decision))}
+          {})))
     {}))
 
 ;;; ===========================================================================
@@ -265,8 +284,10 @@
     (when (:guard/gap dec) (open! (str (:guard/gap dec) \" \" (:guard/gap-detail dec))))
     ;; The seam already encoded this through the :claude-code projection. Print
     ;; it. Re-deriving the hook shape here would be a second encoder, and the
-    ;; one nobody regenerates is the one that rots.
-    (println (json/generate-string (select-keys dec [:hookSpecificOutput])))))
+    ;; one nobody regenerates is the one that rots. The top-level keys are the
+    ;; Stop hook's: a Stop block is `decision`/`reason`, not hookSpecificOutput.
+    (println (json/generate-string
+              (select-keys dec [:hookSpecificOutput :decision :reason :systemMessage])))))
 "))
 
 (defn settings-block

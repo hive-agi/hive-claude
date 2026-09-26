@@ -232,3 +232,20 @@
                 (str/starts-with? line ";;")
                 (str/starts-with? line "#!"))
             (str "header line is not a comment: " (pr-str line)))))))
+
+(deftest a-stop-deny-blocks-the-turn-through-the-top-level-channel
+  (testing "Claude Code reads a Stop hook's top-level decision, not hookSpecificOutput"
+    (let [out (p/->hook-output {:guard/verdict :deny :guard/phase :stop
+                                :guard/reason "merge your branch"
+                                :guard/rule-id :guard/x})]
+      (is (= "block" (:decision out)))
+      (is (str/includes? (:reason out) "merge your branch"))
+      (is (not (contains? out :hookSpecificOutput)))
+      (is (not (str/includes? (pr-str out) "permissionDecision"))
+          "a Stop block never touches the permission channel")))
+  (testing "a Stop warn is a user-visible systemMessage; an allow is silence"
+    (is (string? (:systemMessage (p/->hook-output {:guard/verdict :warn :guard/phase :stop
+                                                   :guard/reason "heads up"}))))
+    (is (= {} (p/->hook-output {:guard/verdict :allow :guard/phase :stop}))))
+  (testing "the dispatcher forwards the Stop keys"
+    (is (str/includes? (p/dispatcher-script "one line") ":decision :reason"))))
