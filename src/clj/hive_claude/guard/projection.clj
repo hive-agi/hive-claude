@@ -226,9 +226,18 @@
    it carries none, which is precisely the copy that rots. Callers should go
    through `render-config`, which builds the summary.
 
-   FAIL-OPEN, and loudly: every way the round-trip can fail — no JVM, no seam, a
-   throwing seam, an unreadable reply — prints `{}` and exits 0, because a guard
-   that cannot answer must not hold the tool call. It writes the reason to
+   WHICH socket: the coordinator's, and only it. The port comes from
+   HIVE_GUARD_NREPL_PORT, then BB_MCP_NREPL_PORT, then 7910 — never from a
+   `.nrepl-port` in the session's working directory. bb-mcp's own resolver reads
+   that file first, and a session that spawned a project REPL leaves one behind:
+   measured 2026-09-29, every hook of such a session went to a REPL with no
+   `:guard/decide` seam, answered `:seam-absent`, and was allowed unjudged, so
+   every deny rule was off for the rest of the session without a trace in the
+   ledger. A port whose reply has no seam is therefore SKIPPED, not trusted.
+
+   FAIL-OPEN, and loudly: when no candidate port holds the seam, or the seam
+   throws, or the reply is unreadable, it prints `{}` and exits 0, because a
+   guard that cannot answer must not hold the tool call. It writes the reason to
    stderr so an allow-because-unreachable is visible rather than silent."
   [provenance]
   (when-not (string? provenance)
@@ -251,9 +260,20 @@
 (deps/add-deps '{:deps {" transport-coord "}})
 (require '[bb-mcp.tools.nrepl :as nrepl]
          '[cheshire.core :as json]
-         '[clojure.edn :as edn])
+         '[clojure.edn :as edn]
+         '[clojure.string :as str])
 
 (def timeout-ms 5000)
+
+(defn candidate-ports
+  \"The coordinator's port, never a working directory's .nrepl-port: a session
+   that spawned a project REPL leaves one behind, and that REPL has no seam.\"
+  []
+  (->> [(System/getenv \"HIVE_GUARD_NREPL_PORT\")
+        (System/getenv \"BB_MCP_NREPL_PORT\")
+        \"7910\"]
+       (keep #(some-> % str/trim not-empty parse-long))
+       distinct))
 
 (defn decide-form [payload]
   (pr-str
@@ -266,6 +286,22 @@
        (catch Throwable e#
          {:guard/gap :remote-threw :guard/gap-detail (ex-message e#)})))))
 
+(defn ask
+  \"{:decision d} from the seam at `port`, or {:miss reason} when that port is
+   unreachable or holds no seam, which sends the caller on to the next port.\"
+  [port payload]
+  (let [res (try (nrepl/eval-code {:port port
+                                   :code (decide-form payload)
+                                   :timeout-ms timeout-ms})
+                 (catch Exception e {:error? true :result (ex-message e)}))
+        dec (when-not (:error? res)
+              (try (edn/read-string (edn/read-string (:result res)))
+                   (catch Exception _ nil)))]
+    (cond
+      (:error? res)                    {:miss (str port \": unreachable: \" (:result res))}
+      (= :seam-absent (:guard/gap dec)) {:miss (str port \": no guard seam\")}
+      :else                            {:decision dec})))
+
 (defn open! [reason]
   (binding [*out* *err*] (println \"hive-guard: allowed unjudged —\" reason))
   (println \"{}\")
@@ -273,13 +309,13 @@
 
 (let [payload (try (json/parse-stream *in* true) (catch Exception _ nil))]
   (when-not (map? payload) (open! \"unreadable payload\"))
-  (let [res (try (nrepl/eval-code {:port (nrepl/get-nrepl-port)
-                                   :code (decide-form payload)
-                                   :timeout-ms timeout-ms})
-                 (catch Exception e {:error? true :result (ex-message e)}))
-        _   (when (:error? res) (open! (str \"guard unreachable: \" (:result res))))
-        dec (try (edn/read-string (edn/read-string (:result res)))
-                 (catch Exception _ nil))]
+  (let [tries (reduce (fn [acc port]
+                        (let [r (ask port payload)]
+                          (if (:decision r) (reduced r) (conj acc (:miss r)))))
+                      []
+                      (candidate-ports))
+        dec   (:decision tries)]
+    (when-not dec (open! (str/join \"; \" tries)))
     (when-not (map? dec) (open! \"unreadable reply\"))
     (when (:guard/gap dec) (open! (str (:guard/gap dec) \" \" (:guard/gap-detail dec))))
     ;; The seam already encoded this through the :claude-code projection. Print
