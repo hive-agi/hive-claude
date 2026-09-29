@@ -171,6 +171,25 @@
     (is (str/includes? script "System/exit 0")
         "a guard that cannot answer must fail open rather than hold the tool call")))
 
+(deftest the-generated-script-asks-the-coordinator-never-the-working-directory
+  ;; 2026-09-29: bb-mcp's port resolver reads a .nrepl-port in the working
+  ;; directory first. A session that spawned a project REPL left one behind, every
+  ;; hook went to a REPL with no :guard/decide seam, answered :seam-absent, and
+  ;; was allowed unjudged, so every deny rule was off for that session.
+  (let [script (-> (gp/render-config proj rule-set) :files first :content)
+        forms  (read-string (str "[" (subs script (str/index-of script "(require")) "]"))
+        defs   (into {} (keep (fn [f] (when (and (seq? f) (= 'defn (first f)))
+                                        [(second f) f])))
+                     forms)]
+    (is (not (str/includes? script "get-nrepl-port"))
+        "the cwd-first resolver is the one that disarmed the guard")
+    (is (contains? defs 'candidate-ports))
+    (is (str/includes? (pr-str (defs 'candidate-ports)) "HIVE_GUARD_NREPL_PORT"))
+    (is (str/includes? (pr-str (defs 'candidate-ports)) "\"7910\"")
+        "the coordinator's own port is always a candidate")
+    (is (str/includes? (pr-str (defs 'ask)) ":seam-absent")
+        "a port with no seam is a miss that moves on, not an answer")))
+
 (deftest the-script-holds-no-second-encoder
   (let [script (-> (gp/render-config proj rule-set) :files first :content)]
     (is (not (str/includes? script "permissionDecision"))
