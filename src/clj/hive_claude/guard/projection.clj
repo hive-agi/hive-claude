@@ -380,18 +380,20 @@
 
    One matcher per hook event the rule set actually uses. `*` because the guard
    decides which tools it cares about from the rule set — narrowing here would
-   put the tool list in a second place."
-  [rule-set]
-  {:hooks
-   (into {}
-         (map (fn [event]
-                [event [{:matcher "*"
-                         :hooks [{:type "command"
-                                  :command dispatcher-path
-                                  :timeout 10}]}]]))
-         (rule-phases rule-set))})
+   put the tool list in a second place. `path` is the dispatcher every hook
+   runs; it defaults to the home hook directory."
+  ([rule-set] (settings-block rule-set dispatcher-path))
+  ([rule-set path]
+   {:hooks
+    (into {}
+          (map (fn [event]
+                 [event [{:matcher "*"
+                          :hooks [{:type "command"
+                                   :command path
+                                   :timeout 10}]}]]))
+          (rule-phases rule-set))}))
 
-(defrecord ClaudeProjection []
+(defrecord ClaudeProjection [path]
   gp/IGuardProjection
 
   (harness-id [_] harness)
@@ -404,10 +406,10 @@
     (let [events (rule-phases rule-set)
           prov   (str "Generated from " (count rule-set) " rule(s) covering "
                       (str/join ", " events) ".")]
-      {:files [{:path    dispatcher-path
+      {:files [{:path    path
                 :content (dispatcher-script prov)
                 :mode    "0755"}]
-       :settings-block (settings-block rule-set)
+       :settings-block (settings-block rule-set path)
        :notes [(str "Merge :settings-block into ~/.claude/settings.json under \"hooks\". "
                     "It is returned as data rather than written, so the block is "
                     "reviewable before it can deny anything.")
@@ -417,9 +419,14 @@
                "Retires ~/.claude/hooks/auto-mode-guard.sh and carto-first.sh (GUARD-11)."]})))
 
 (defn make-projection
-  "Construct the `ClaudeProjection`."
-  []
-  (->ClaudeProjection))
+  "Construct the `ClaudeProjection`.
+
+   `:dispatcher-path` names where the rendered hook script is meant to live
+   (default `~/.claude/hooks/hive-guard.bb`). Injecting it is what lets a caller,
+   a test included, render for a home other than the real one."
+  ([] (make-projection {}))
+  ([opts]
+   (->ClaudeProjection (get opts :dispatcher-path dispatcher-path))))
 
 (defonce ^{:doc "The single `ClaudeProjection` this library publishes to the guard.
 
