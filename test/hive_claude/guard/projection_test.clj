@@ -173,18 +173,31 @@
 ;;; Render
 ;;; ===========================================================================
 
+(deftest render-config-defaults-to-the-home-hook-path
+  (is (= "~/.claude/hooks/hive-guard.bb"
+         (-> (gp/render-config proj rule-set) :files first :path))
+      "with no injected path the projection targets the user's hook directory"))
+
 (deftest render-config-writes-nothing-and-returns-content
-  (let [{:keys [files settings-block notes]} (gp/render-config proj rule-set)
+  ;; Hermetic: the dispatcher path is INJECTED into a fresh temp dir, so the
+  ;; assertion never reads the real ~/.claude, where an installed guard lives.
+  (let [dir  (.toFile (java.nio.file.Files/createTempDirectory
+                       "hive-guard-render" (make-array java.nio.file.attribute.FileAttribute 0)))
+        path (str (java.io.File. dir "hive-guard.bb"))
+        proj (p/make-projection {:dispatcher-path path})
+        {:keys [files settings-block notes]} (gp/render-config proj rule-set)
         script (:content (first files))]
-    (is (= 1 (count files)) "one dispatcher, because the payload names its own moment")
-    (is (str/ends-with? (:path (first files)) "hive-guard.bb"))
-    (is (= "0755" (:mode (first files))))
-    (is (string? script))
-    (is (seq notes))
-    (is (map? settings-block))
-    (doseq [f files]
-      (is (not (.exists (java.io.File. (str/replace (:path f) #"^~" (System/getProperty "user.home")))))
-          "render-config must not have installed anything"))))
+    (try
+      (is (= 1 (count files)) "one dispatcher, because the payload names its own moment")
+      (is (= path (:path (first files))) "the injected path is the one rendered")
+      (is (= #{path} (set (for [[_ ms] (:hooks settings-block) m ms h (:hooks m)] (:command h))))
+          "every hook registration points at the same injected path")
+      (is (= "0755" (:mode (first files))))
+      (is (string? script))
+      (is (seq notes))
+      (is (map? settings-block))
+      (is (empty? (.list dir)) "render-config must not have installed anything")
+      (finally (.delete dir)))))
 
 (deftest the-hook-registrations-follow-the-RULE-SET
   (let [events (-> (gp/render-config proj rule-set) :settings-block :hooks keys set)]
