@@ -84,6 +84,36 @@
     (not (str/blank? session_id)) (assoc :session/id session_id)
     (not (str/blank? cwd))        (assoc :cwd cwd)))
 
+(defn- ->depth
+  "A ling depth from the hook's string (or number), or nil."
+  [v]
+  (cond
+    (integer? v) (long v)
+    (string? v)  (try (Long/parseLong (str/trim v)) (catch Exception _ nil))
+    :else        nil))
+
+(defn- ling-entries
+  "The ling identity the dispatcher stamped under `:hive_ling`, read from the
+   hook process's environment. Claude Code's own payload carries none, and a
+   headless ling IS a `claude` process behind this same hook, so without these
+   a ling's call is indistinguishable from the operator's.
+
+     :slave_id   CLAUDE_SWARM_SLAVE_ID  -> :agent/id
+     :depth      HIVE_LING_DEPTH        -> :ling/depth (long)
+     :credential HIVE_AGENT_CREDENTIAL present -> :ling/credential? true
+
+   Only the credential's PRESENCE crosses: its value never leaves the hook.
+   Anything malformed is dropped, never guessed. Pure."
+  [{:keys [hive_ling]}]
+  (if-not (map? hive_ling)
+    {}
+    (let [{:keys [slave_id depth credential]} hive_ling
+          d (->depth depth)]
+      (cond-> {}
+        (and (string? slave_id) (not (str/blank? slave_id))) (assoc :agent/id slave_id)
+        d                   (assoc :ling/depth d)
+        (true? credential)  (assoc :ling/credential? true)))))
+
 (defn- phase-entries
   "The phase-specific GuardEvent entries for `phase` out of `raw`."
   [phase {:keys [tool_name tool_input tool_response prompt source agent_type]}]
@@ -102,7 +132,9 @@
 
 (defn ->event
   "Assemble the GuardEvent `raw` describes, or nil when it describes none.
-   The decode half, exposed for a caller that already holds the parsed payload."
+   The decode half, exposed for a caller that already holds the parsed payload.
+   A `:hive_ling` map the dispatcher stamped becomes the ling identity
+   (`ling-entries`)."
   [raw]
   (when (map? raw)
     (when-let [phase (event->phase (:hook_event_name raw))]
@@ -112,6 +144,7 @@
       (try
         (ge/guard-event (merge {:guard/phase phase :guard/harness harness}
                                (optional-entries raw)
+                               (ling-entries raw)
                                (phase-entries phase raw)))
         (catch Exception e
           (throw (ex-info "guard: could not decode a Claude Code hook payload"
@@ -302,12 +335,28 @@
       (= :seam-absent (:guard/gap dec)) {:miss (str port \": no guard seam\")}
       :else                            {:decision dec})))
 
+(defn ling-identity
+  \"The ling identity of THIS hook process, from its environment. Headless
+   lings are claude processes behind this same hook, and Claude Code's payload
+   names no agent, so without it a ling looks like the operator. The
+   credential crosses as PRESENCE only: its value never leaves this process.\"
+  []
+  (let [slave (System/getenv \"CLAUDE_SWARM_SLAVE_ID\")
+        depth (System/getenv \"HIVE_LING_DEPTH\")
+        cred? (some? (System/getenv \"HIVE_AGENT_CREDENTIAL\"))]
+    (cond-> {}
+      (not (str/blank? slave)) (assoc :slave_id slave)
+      (not (str/blank? depth)) (assoc :depth depth)
+      cred?                    (assoc :credential true))))
+
 (defn open! [reason]
   (binding [*out* *err*] (println \"hive-guard: allowed unjudged —\" reason))
   (println \"{}\")
   (System/exit 0))
 
-(let [payload (try (json/parse-stream *in* true) (catch Exception _ nil))]
+(let [payload (try (json/parse-stream *in* true) (catch Exception _ nil))
+      ling    (ling-identity)
+      payload (cond-> payload (and (map? payload) (seq ling)) (assoc :hive_ling ling))]
   (when-not (map? payload) (open! \"unreadable payload\"))
   (let [tries (reduce (fn [acc port]
                         (let [r (ask port payload)]

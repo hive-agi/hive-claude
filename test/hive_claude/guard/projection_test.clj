@@ -37,6 +37,41 @@
                    :rule/reason  "carto is the interface"})])
 
 ;;; ===========================================================================
+;;; Ling identity — headless lings are claude CLI processes behind this hook
+;;; ===========================================================================
+
+(def ^:private bash-pre
+  {:hook_event_name "PreToolUse" :tool_name "Bash" :tool_input {:command "sleep 30"}})
+
+(deftest a-ling-identity-the-hook-stamped-is-decoded
+  (let [e (p/->event (assoc bash-pre :hive_ling {:slave_id "kb-triage-a2"
+                                                 :depth "1"
+                                                 :credential true}))]
+    (is (ge/valid? e))
+    (is (= "kb-triage-a2" (:agent/id e)))
+    (is (= 1 (:ling/depth e)))
+    (is (true? (:ling/credential? e)))))
+
+(deftest a-coordinator-payload-carries-no-ling-identity
+  (doseq [raw [bash-pre
+               (assoc bash-pre :hive_ling {})
+               (assoc bash-pre :hive_ling {:slave_id "" :depth "" :credential false})
+               (assoc bash-pre :hive_ling "garbage")
+               (assoc bash-pre :hive_ling {:depth "not-a-number"})]]
+    (let [e (p/->event raw)]
+      (is (ge/valid? e) (pr-str raw))
+      (is (not-any? #(contains? e %) [:agent/id :ling/depth :ling/credential?]) (pr-str raw)))))
+
+(deftest the-hook-reads-the-ling-identity-from-its-environment
+  (let [s (p/dispatcher-script "one line")]
+    (doseq [v ["CLAUDE_SWARM_SLAVE_ID" "HIVE_LING_DEPTH"]]
+      (is (str/includes? s (str "(System/getenv \"" v "\")")) v))
+    (is (str/includes? s ":hive_ling"))
+    (testing "the credential's VALUE never leaves the process: only its presence"
+      (is (str/includes? s "(some? (System/getenv \"HIVE_AGENT_CREDENTIAL\"))"))
+      (is (= 1 (count (re-seq #"HIVE_AGENT_CREDENTIAL" s)))))))
+
+;;; ===========================================================================
 ;;; Identity
 ;;; ===========================================================================
 
