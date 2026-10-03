@@ -155,9 +155,12 @@
                         :agents {:helper {:description "helps"}}})
         ;; ling-id->safe-id converts "my-ling-123" to "my_ling_123"
         (is (= "my_ling_123" @start-loop-args))
+        ;; spawn forwards every option key it knows; absent ones arrive as nil.
         (is (= {:cwd "/projects/test"
                 :system-prompt "do stuff"
-                :agents {:helper {:description "helps"}}}
+                :mcp-servers nil
+                :agents {:helper {:description "helps"}}
+                :env nil}
                @build-opts-args))
         (is (= "my_ling_123" (:safe-id @connect-args)))
         (is (= :test-options (:opts @connect-args)))

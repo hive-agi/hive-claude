@@ -37,6 +37,41 @@
                    :rule/reason  "carto is the interface"})])
 
 ;;; ===========================================================================
+;;; Ling identity — headless lings are claude CLI processes behind this hook
+;;; ===========================================================================
+
+(def ^:private bash-pre
+  {:hook_event_name "PreToolUse" :tool_name "Bash" :tool_input {:command "sleep 30"}})
+
+(deftest a-ling-identity-the-hook-stamped-is-decoded
+  (let [e (p/->event (assoc bash-pre :hive_ling {:slave_id "kb-triage-a2"
+                                                 :depth "1"
+                                                 :credential true}))]
+    (is (ge/valid? e))
+    (is (= "kb-triage-a2" (:agent/id e)))
+    (is (= 1 (:ling/depth e)))
+    (is (true? (:ling/credential? e)))))
+
+(deftest a-coordinator-payload-carries-no-ling-identity
+  (doseq [raw [bash-pre
+               (assoc bash-pre :hive_ling {})
+               (assoc bash-pre :hive_ling {:slave_id "" :depth "" :credential false})
+               (assoc bash-pre :hive_ling "garbage")
+               (assoc bash-pre :hive_ling {:depth "not-a-number"})]]
+    (let [e (p/->event raw)]
+      (is (ge/valid? e) (pr-str raw))
+      (is (not-any? #(contains? e %) [:agent/id :ling/depth :ling/credential?]) (pr-str raw)))))
+
+(deftest the-hook-reads-the-ling-identity-from-its-environment
+  (let [s (p/dispatcher-script "one line")]
+    (doseq [v ["CLAUDE_SWARM_SLAVE_ID" "HIVE_LING_DEPTH"]]
+      (is (str/includes? s (str "(System/getenv \"" v "\")")) v))
+    (is (str/includes? s ":hive_ling"))
+    (testing "the credential's VALUE never leaves the process: only its presence"
+      (is (str/includes? s "(some? (System/getenv \"HIVE_AGENT_CREDENTIAL\"))"))
+      (is (= 1 (count (re-seq #"HIVE_AGENT_CREDENTIAL" s)))))))
+
+;;; ===========================================================================
 ;;; Identity
 ;;; ===========================================================================
 
@@ -138,18 +173,31 @@
 ;;; Render
 ;;; ===========================================================================
 
+(deftest render-config-defaults-to-the-home-hook-path
+  (is (= "~/.claude/hooks/hive-guard.bb"
+         (-> (gp/render-config proj rule-set) :files first :path))
+      "with no injected path the projection targets the user's hook directory"))
+
 (deftest render-config-writes-nothing-and-returns-content
-  (let [{:keys [files settings-block notes]} (gp/render-config proj rule-set)
+  ;; Hermetic: the dispatcher path is INJECTED into a fresh temp dir, so the
+  ;; assertion never reads the real ~/.claude, where an installed guard lives.
+  (let [dir  (.toFile (java.nio.file.Files/createTempDirectory
+                       "hive-guard-render" (make-array java.nio.file.attribute.FileAttribute 0)))
+        path (str (java.io.File. dir "hive-guard.bb"))
+        proj (p/make-projection {:dispatcher-path path})
+        {:keys [files settings-block notes]} (gp/render-config proj rule-set)
         script (:content (first files))]
-    (is (= 1 (count files)) "one dispatcher, because the payload names its own moment")
-    (is (str/ends-with? (:path (first files)) "hive-guard.bb"))
-    (is (= "0755" (:mode (first files))))
-    (is (string? script))
-    (is (seq notes))
-    (is (map? settings-block))
-    (doseq [f files]
-      (is (not (.exists (java.io.File. (str/replace (:path f) #"^~" (System/getProperty "user.home")))))
-          "render-config must not have installed anything"))))
+    (try
+      (is (= 1 (count files)) "one dispatcher, because the payload names its own moment")
+      (is (= path (:path (first files))) "the injected path is the one rendered")
+      (is (= #{path} (set (for [[_ ms] (:hooks settings-block) m ms h (:hooks m)] (:command h))))
+          "every hook registration points at the same injected path")
+      (is (= "0755" (:mode (first files))))
+      (is (string? script))
+      (is (seq notes))
+      (is (map? settings-block))
+      (is (empty? (.list dir)) "render-config must not have installed anything")
+      (finally (.delete dir)))))
 
 (deftest the-hook-registrations-follow-the-RULE-SET
   (let [events (-> (gp/render-config proj rule-set) :settings-block :hooks keys set)]
@@ -170,6 +218,25 @@
     (is (str/includes? script "GENERATED"))
     (is (str/includes? script "System/exit 0")
         "a guard that cannot answer must fail open rather than hold the tool call")))
+
+(deftest the-generated-script-asks-the-coordinator-never-the-working-directory
+  ;; 2026-09-29: bb-mcp's port resolver reads a .nrepl-port in the working
+  ;; directory first. A session that spawned a project REPL left one behind, every
+  ;; hook went to a REPL with no :guard/decide seam, answered :seam-absent, and
+  ;; was allowed unjudged, so every deny rule was off for that session.
+  (let [script (-> (gp/render-config proj rule-set) :files first :content)
+        forms  (read-string (str "[" (subs script (str/index-of script "(require")) "]"))
+        defs   (into {} (keep (fn [f] (when (and (seq? f) (= 'defn (first f)))
+                                        [(second f) f])))
+                     forms)]
+    (is (not (str/includes? script "get-nrepl-port"))
+        "the cwd-first resolver is the one that disarmed the guard")
+    (is (contains? defs 'candidate-ports))
+    (is (str/includes? (pr-str (defs 'candidate-ports)) "HIVE_GUARD_NREPL_PORT"))
+    (is (str/includes? (pr-str (defs 'candidate-ports)) "\"7910\"")
+        "the coordinator's own port is always a candidate")
+    (is (str/includes? (pr-str (defs 'ask)) ":seam-absent")
+        "a port with no seam is a miss that moves on, not an answer")))
 
 (deftest the-script-holds-no-second-encoder
   (let [script (-> (gp/render-config proj rule-set) :files first :content)]
@@ -232,3 +299,20 @@
                 (str/starts-with? line ";;")
                 (str/starts-with? line "#!"))
             (str "header line is not a comment: " (pr-str line)))))))
+
+(deftest a-stop-deny-blocks-the-turn-through-the-top-level-channel
+  (testing "Claude Code reads a Stop hook's top-level decision, not hookSpecificOutput"
+    (let [out (p/->hook-output {:guard/verdict :deny :guard/phase :stop
+                                :guard/reason "merge your branch"
+                                :guard/rule-id :guard/x})]
+      (is (= "block" (:decision out)))
+      (is (str/includes? (:reason out) "merge your branch"))
+      (is (not (contains? out :hookSpecificOutput)))
+      (is (not (str/includes? (pr-str out) "permissionDecision"))
+          "a Stop block never touches the permission channel")))
+  (testing "a Stop warn is a user-visible systemMessage; an allow is silence"
+    (is (string? (:systemMessage (p/->hook-output {:guard/verdict :warn :guard/phase :stop
+                                                   :guard/reason "heads up"}))))
+    (is (= {} (p/->hook-output {:guard/verdict :allow :guard/phase :stop}))))
+  (testing "the dispatcher forwards the Stop keys"
+    (is (str/includes? (p/dispatcher-script "one line") ":decision :reason"))))

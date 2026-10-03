@@ -26,8 +26,13 @@
     (let [get-fn (requiring-resolve 'hive-claude.init/get-addon-instance)]
       (is (nil? (get-fn))))))
 
-(deftest terminal-make-returns-nil-without-protocol
-  (testing "make-claude-terminal returns nil when ITerminalAddon not on classpath"
-    (let [make-fn (requiring-resolve 'hive-claude.terminal/make-claude-terminal)]
-      ;; Without hive-mcp on classpath, should return nil gracefully
-      (is (nil? (make-fn))))))
+(deftest terminal-make-reifies-the-hive-addon-contract
+  (testing "make-claude-terminal reifies hive-addon.terminal/ITerminalAddon without hive-mcp"
+    ;; Since f0d2057 the terminal implements the contract lib's protocol, which
+    ;; is a declared dep, so construction no longer depends on the host.
+    (let [make-fn  (requiring-resolve 'hive-claude.terminal/make-claude-terminal)
+          iface    @(requiring-resolve 'hive-addon.terminal/ITerminalAddon)
+          id-fn    (requiring-resolve 'hive-addon.terminal/terminal-id)
+          terminal (make-fn)]
+      (is (satisfies? iface terminal))
+      (is (= :claude (id-fn terminal))))))

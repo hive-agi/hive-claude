@@ -5,12 +5,12 @@
         ;; host, hive-mcp or not, mount this jar.
         ;; Floor 0.3.12: first release carrying hive-addon.terminal and
         ;; hive-addon.vessel, the companion contracts this addon reifies.
-        io.github.hive-agi/hive-addon {:mvn/version "0.3.12"}
-        io.github.hive-agi/hive-dsl {:mvn/version "0.5.20"}
+        io.github.hive-agi/hive-addon {:mvn/version "1.1.2"}
+        io.github.hive-agi/hive-dsl {:mvn/version "0.5.34"}
         ;; Floor 0.2.1: hive-claude.init compiles against
         ;; hive-spi.guard.ports/projection-ext-key, which 0.2.0 does not carry.
-        io.github.hive-agi/hive-spi {:mvn/version "0.2.1"}
-        org.clojure/clojure {:mvn/version "1.12.5"}
+        io.github.hive-agi/hive-spi {:mvn/version "1.4.2"}
+        org.clojure/clojure {:mvn/version "1.12.6"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
         cheshire/cheshire {:mvn/version "6.2.0"}
         ;; SDK dependencies (loaded lazily via requiring-resolve)
@@ -18,7 +18,7 @@
         org.clojure/core.async {:mvn/version "1.9.865"}
         org.clojure/data.json {:mvn/version "2.5.2"}}
  :aliases
- {:build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.10"}}
+ {:build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.28"}}
           :ns-default hive-build.api}
   :cljel {:extra-deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}}
           :main-opts ["-m" "clojure-elisp.core"]}
