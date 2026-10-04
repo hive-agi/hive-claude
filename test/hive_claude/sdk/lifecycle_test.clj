@@ -130,7 +130,7 @@
         (is (number? (:started-at sess)))))))
 
 (deftest spawn-passes-correct-args-to-deps
-  (testing "spawn wires ling-id, cwd, agents through to deps correctly"
+  (testing "spawn wires ling-id, cwd, agents and env through to deps"
     (let [start-loop-args (atom nil)
           build-opts-args (atom nil)
           connect-args (atom nil)]
@@ -145,22 +145,17 @@
                       :test-options)
                     event-loop/connect-session-client!
                     (fn [safe-id base-opts loop-var]
-                      (reset! connect-args {:safe-id safe-id
-                                            :opts base-opts
-                                            :loop-var loop-var})
+                      (reset! connect-args {:safe-id safe-id :opts base-opts :loop-var loop-var})
                       "test-client")]
         (lifecycle/spawn-headless-sdk!
-         "my-ling-123" {:cwd "/projects/test"
-                        :system-prompt "do stuff"
-                        :agents {:helper {:description "helps"}}})
-        ;; Check only the keys spawn means to wire through; the deps map may
-        ;; carry more keys (e.g. :env, :mcp-servers) that this test does not
-        ;; care about.
+         "my-ling-123" {:cwd "/projects/test" :system-prompt "do stuff"
+                        :agents {:helper {:description "helps"}}
+                        :env {"CLAUDE_SWARM_SLAVE_ID" "my-ling-123"}})
         (is (= "my_ling_123" @start-loop-args))
-        (is (= {:cwd "/projects/test"
-                :system-prompt "do stuff"
-                :agents {:helper {:description "helps"}}}
-               (select-keys @build-opts-args [:cwd :system-prompt :agents])))
+        (is (= {:cwd "/projects/test" :system-prompt "do stuff"
+                :agents {:helper {:description "helps"}}
+                :env {"CLAUDE_SWARM_SLAVE_ID" "my-ling-123"}}
+               (select-keys @build-opts-args [:cwd :system-prompt :agents :env])))
         (is (= "my_ling_123" (:safe-id @connect-args)))
         (is (= :test-options (:opts @connect-args)))
         (is (= "test-loop" (:loop-var @connect-args)))))))

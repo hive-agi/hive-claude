@@ -20,15 +20,15 @@
    Usage:
      ;; Via addon system (auto-discovered from META-INF manifest):
      (init-as-addon!)"
-  (:require [hive-claude.terminal :as terminal]
+  (:require [hive-addon.protocol :as addon]
+            [hive-claude.terminal :as terminal]
             [hive-claude.log :as log]
             [hive-claude.elisp-load-state :as els]
             [hive-dsl.result :as r]
             [clojure.set :as set]
             [hive-claude.guard.projection :as guard-projection]
             [hive-spi.guard.ports :as gp]
-            [hive-claude.util :as util]
-            [hive-addon.protocol :as addon-proto]))
+            [hive-claude.util :as util]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -38,10 +38,7 @@
 ;; Resolution Helpers
 ;; =============================================================================
 
-(def ^:private try-resolve
-  "Attempt to resolve a fully-qualified symbol. Returns var or nil.
-   Alias of hive-claude.util/try-resolve, this repo's single copy."
-  util/try-resolve)
+(def ^:private try-resolve util/try-resolve)
 
 ;; =============================================================================
 ;; Elisp Load State — thin re-exports for backwards compat.
@@ -59,13 +56,12 @@
 (defonce ^:private addon-instance (atom nil))
 
 (defn- make-addon
-  "Create an IAddon reify for hive-claude.
-   Returns nil if protocol is not on classpath."
+  "Create an IAddon reify for hive-claude."
   []
-  (when (try-resolve 'hive-mcp.addons.protocol/IAddon)
-    (let [state (atom {:initialized? false})]
-      (reify
-        addon-proto/IAddon
+  (let [state (atom {:initialized? false})]
+    (reify
+      addon/IAddon
+
         (addon-id [_] "hive.claude")
 
         (addon-type [_] :native)
@@ -168,7 +164,7 @@
                :details {:terminal-id :claude
                          :emacs-has-hive-claude emacs-ok?}})
             {:status :down
-             :details {:reason "not initialized"}}))))))
+             :details {:reason "not initialized"}})))))
 
 ;; =============================================================================
 ;; Dep Registry + Nil-Railway Pipeline

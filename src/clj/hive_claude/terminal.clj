@@ -12,11 +12,11 @@
 
    All hive-mcp dependencies resolved at runtime via requiring-resolve
    (zero compile-time coupling)."
-  (:require [hive-claude.elisp :as elisp]
-            [hive-claude.log :as log]
-            [clojure.string :as str]
+  (:require [hive-addon.terminal :as addon-term]
+            [hive-claude.elisp :as elisp]
             [hive-claude.util :as util]
-            [hive-addon.terminal :as addon-term]))
+            [hive-claude.log :as log]
+            [clojure.string :as str]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -26,10 +26,7 @@
 ;; Runtime Resolution
 ;; =============================================================================
 
-(def ^:private try-resolve
-  "Attempt to resolve a fully-qualified symbol. Returns var or nil.
-   Alias of hive-claude.util/try-resolve, this repo's single copy."
-  util/try-resolve)
+(def ^:private try-resolve util/try-resolve)
 
 (defn- eval-elisp!
   "Resolve and call hive-mcp.emacs.client/eval-elisp-with-timeout.
@@ -107,12 +104,11 @@
 ;; =============================================================================
 
 (defn make-claude-terminal
-  "Create an ITerminalAddon reify for Claude Code terminal backend.
-   Returns nil if ITerminalAddon protocol is not on classpath."
+  "Create an ITerminalAddon reify for Claude Code terminal backend."
   []
-  (when (try-resolve 'hive-mcp.addons.terminal/ITerminalAddon)
-    (reify
-      addon-term/ITerminalAddon
+  (reify
+    addon-term/ITerminalAddon
+
       (terminal-id [_] :claude)
 
       (terminal-spawn! [_ ctx opts]
@@ -186,4 +182,4 @@
               {:keys [success error]} (eval-claude-elisp elisp 3000)]
           (if success
             {:success? true :ling-id id}
-            {:success? false :ling-id id :errors [(str "interrupt failed: " error)]}))))))
+            {:success? false :ling-id id :errors [(str "interrupt failed: " error)]})))))
