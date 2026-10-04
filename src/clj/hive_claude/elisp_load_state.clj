@@ -26,16 +26,17 @@
    used throughout hive-claude."
   (:require [hive-claude.log :as log]
             [clojure.java.io :as io]
-            [clojure.string :as str]))
+            [clojure.string :as str]
+            [hive-claude.util :as util]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 
-(defn- try-resolve
-  "Attempt to resolve a fully-qualified symbol. Returns var or nil."
-  [sym]
-  (try (requiring-resolve sym) (catch Exception _ nil)))
+(def ^:private try-resolve
+  "Attempt to resolve a fully-qualified symbol. Returns var or nil.
+   Alias of hive-claude.util/try-resolve, this repo's single copy."
+  util/try-resolve)
 
 ;; =============================================================================
 ;; Elisp Load-Path Injection

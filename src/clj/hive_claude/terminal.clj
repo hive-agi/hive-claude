@@ -14,6 +14,7 @@
    (zero compile-time coupling)."
   (:require [hive-addon.terminal :as addon-term]
             [hive-claude.elisp :as elisp]
+            [hive-claude.util :as util]
             [hive-claude.log :as log]
             [clojure.string :as str]))
 
@@ -25,10 +26,7 @@
 ;; Runtime Resolution
 ;; =============================================================================
 
-(defn- try-resolve
-  "Attempt to resolve a fully-qualified symbol. Returns var or nil."
-  [sym]
-  (try (requiring-resolve sym) (catch Exception _ nil)))
+(def ^:private try-resolve util/try-resolve)
 
 (defn- eval-elisp!
   "Resolve and call hive-mcp.emacs.client/eval-elisp-with-timeout.

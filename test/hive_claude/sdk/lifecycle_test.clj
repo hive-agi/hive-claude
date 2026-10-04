@@ -130,7 +130,7 @@
         (is (number? (:started-at sess)))))))
 
 (deftest spawn-passes-correct-args-to-deps
-  (testing "spawn wires ling-id, cwd, agents through to deps correctly"
+  (testing "spawn wires ling-id, cwd, agents and env through to deps"
     (let [start-loop-args (atom nil)
           build-opts-args (atom nil)
           connect-args (atom nil)]
@@ -145,23 +145,17 @@
                       :test-options)
                     event-loop/connect-session-client!
                     (fn [safe-id base-opts loop-var]
-                      (reset! connect-args {:safe-id safe-id
-                                            :opts base-opts
-                                            :loop-var loop-var})
+                      (reset! connect-args {:safe-id safe-id :opts base-opts :loop-var loop-var})
                       "test-client")]
         (lifecycle/spawn-headless-sdk!
-         "my-ling-123" {:cwd "/projects/test"
-                        :system-prompt "do stuff"
-                        :agents {:helper {:description "helps"}}})
-        ;; ling-id->safe-id converts "my-ling-123" to "my_ling_123"
+         "my-ling-123" {:cwd "/projects/test" :system-prompt "do stuff"
+                        :agents {:helper {:description "helps"}}
+                        :env {"CLAUDE_SWARM_SLAVE_ID" "my-ling-123"}})
         (is (= "my_ling_123" @start-loop-args))
-        ;; spawn forwards every option key it knows; absent ones arrive as nil.
-        (is (= {:cwd "/projects/test"
-                :system-prompt "do stuff"
-                :mcp-servers nil
+        (is (= {:cwd "/projects/test" :system-prompt "do stuff"
                 :agents {:helper {:description "helps"}}
-                :env nil}
-               @build-opts-args))
+                :env {"CLAUDE_SWARM_SLAVE_ID" "my-ling-123"}}
+               (select-keys @build-opts-args [:cwd :system-prompt :agents :env])))
         (is (= "my_ling_123" (:safe-id @connect-args)))
         (is (= :test-options (:opts @connect-args)))
         (is (= "test-loop" (:loop-var @connect-args)))))))

@@ -47,19 +47,19 @@
        "refs=" (pr-str ctx-refs) " scope=" scope))
 
 (defn- install-port! [ns-sym var-sym f]
-  (create-ns ns-sym)
-  (intern ns-sym var-sym f))
+  (when-not (find-ns ns-sym) (create-ns ns-sym))
+  (or (ns-resolve ns-sym var-sym) (intern ns-sym var-sym f)))
 
-(defn- uninstall-ports! []
-  (ns-unmap dispatch-port 'context-type)
-  (ns-unmap envelope-port 'enrich-context))
+(defn- uninstall-ports! [] nil)
 
 (use-fixtures :each
   (fn [f]
     (reset! enrich-calls [])
-    (install-port! dispatch-port 'context-type stub-context-type)
-    (install-port! envelope-port 'enrich-context stub-enrich-context)
-    (try (f) (finally (uninstall-ports!)))))
+    (let [context-var (requiring-resolve 'hive-mcp.protocols.dispatch/context-type)
+          enrich-var (requiring-resolve 'hive-mcp.agent.context-envelope/enrich-context)]
+      (with-redefs-fn {context-var stub-context-type
+                       enrich-var stub-enrich-context} f))))
+
 
 (def ^:private build-prefix @#'lifecycle/build-kg-context-prefix)
 
@@ -97,9 +97,10 @@
     (is (nil? (build-prefix (ref-context {:a "b"}))))))
 
 (deftest build-kg-context-prefix-without-host
-  (testing "with no host ports on the classpath the prefix is nil"
-    (uninstall-ports!)
-    (is (nil? (build-prefix (ref-context {:a "b"}))))))
+  (testing "when a host port fails, the prefix is nil"
+    (with-redefs-fn {(requiring-resolve 'hive-mcp.protocols.dispatch/context-type)
+                     (fn [_] (throw (Exception. "host unavailable")))}
+      (fn [] (is (nil? (build-prefix (ref-context {:a "b"}))))))))
 
 ;; =============================================================================
 ;; Dispatch context threaded through the session
