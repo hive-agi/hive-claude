@@ -38,7 +38,7 @@
     ;; Prime the cache by calling sdk-status with mocked fns
     (with-redefs [avail/check-libpython-available? (constantly true)
                   avail/check-sdk-available?       (constantly true)]
-      ;; Also mock requiring-resolve for the initialize! call inside sdk-status
+      ;; Also mock requiring-resolve for the ensure-python! resolve inside sdk-status
       (let [orig-rr requiring-resolve]
         (with-redefs [requiring-resolve (fn [sym]
                                           (if (= sym 'hive-agent-bridge.python.bridge/ensure-python!)

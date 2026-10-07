@@ -3,28 +3,31 @@
 
    Tests the init-as-addon! lifecycle without requiring hive-mcp on classpath.
    Verifies graceful degradation when protocols are unavailable."
-  (:require [clojure.test :refer [deftest is testing]]))
+  (:require [clojure.test :refer [deftest is testing]]
+            [hive-claude.init :as init]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
 ;; SPDX-License-Identifier: AGPL-3.0-or-later
 
 (deftest init-without-hive-mcp-returns-empty
-  (testing "init-as-addon! returns empty result when hive-mcp not on classpath"
-    ;; When running standalone (no hive-mcp), init should degrade gracefully
-    (let [init-fn (requiring-resolve 'hive-claude.init/init-as-addon!)
-          result (init-fn)]
-      (is (map? result))
-      (is (contains? result :registered))
-      (is (contains? result :total))
-      ;; Without hive-mcp protocols, should register nothing
-      (is (= 0 (:total result)))
-      (is (empty? (:registered result))))))
+  (testing "host registration fails gracefully when its registry ports are absent"
+    (with-redefs [hive-claude.init/addon-instance (atom nil)]
+      (let [registry (ns-resolve 'hive-claude.init 'dep-registry)
+            resolver (ns-resolve 'hive-claude.init 'try-resolve)
+            original @resolver]
+        (with-redefs-fn {resolver (fn [sym]
+                                    (when-not (= "hive-mcp" (namespace sym))
+                                      (original sym)))}
+          (fn []
+            (let [result (hive-claude.init/init-as-addon!)]
+              (is (= {:registered [] :total 0} result))
+              (is (nil? (hive-claude.init/get-addon-instance))))))))))
 
 (deftest get-addon-instance-nil-without-init
   (testing "get-addon-instance returns nil before initialization"
-    (let [get-fn (requiring-resolve 'hive-claude.init/get-addon-instance)]
-      (is (nil? (get-fn))))))
+    (with-redefs [hive-claude.init/addon-instance (atom nil)]
+      (is (nil? (hive-claude.init/get-addon-instance))))) )
 
 (deftest terminal-make-reifies-the-hive-addon-contract
   (testing "make-claude-terminal reifies hive-addon.terminal/ITerminalAddon without hive-mcp"
@@ -36,3 +39,10 @@
           terminal (make-fn)]
       (is (satisfies? iface terminal))
       (is (= :claude (id-fn terminal))))))
+
+(deftest init-with-host-registers-backends
+  (testing "init-as-addon! registers against the host when available"
+    (with-redefs [hive-claude.init/addon-instance (atom nil)]
+      (let [result (hive-claude.init/init-as-addon!)]
+        (is (pos? (:total result)))
+        (is (seq (:registered result)))))))

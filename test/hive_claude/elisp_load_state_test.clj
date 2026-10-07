@@ -192,13 +192,21 @@
 ;; ---------------------------------------------------------------------------
 
 (deftest ^:integration live-load-cycle
-  (when (= "1" (System/getenv "HIVE_CLAUDE_INTEGRATION"))
+  (if-let [_live? (= "1" (System/getenv "HIVE_CLAUDE_INTEGRATION"))]
     (testing "against a live Emacs: ensure-elisp-loaded! succeeds"
       ;; Uninstall our stub so the real var is used
       (uninstall-stub!)
       (try
         (let [ensure! (requiring-resolve 'hive-claude.elisp-load-state/ensure-elisp-loaded!)
-              pred   (requiring-resolve 'hive-claude.elisp-load-state/elisp-loaded?)]
+              pred    (requiring-resolve 'hive-claude.elisp-load-state/elisp-loaded?)]
           (is (true? (ensure!)))
           (is (true? (pred))))
-        (finally (install-stub!))))))
+        (finally (install-stub!))))
+    ;; Offline contract: with no live Emacs in this environment, ensure!
+    ;; fails cleanly (returns false) rather than throwing, and the predicate
+    ;; reports not-loaded.
+    (testing "without a live Emacs: loader fails cleanly instead of throwing"
+      (let [ensure! (requiring-resolve 'hive-claude.elisp-load-state/ensure-elisp-loaded!)
+            pred    (requiring-resolve 'hive-claude.elisp-load-state/elisp-loaded?)]
+        (is (false? (ensure!)))
+        (is (false? (pred)))))))

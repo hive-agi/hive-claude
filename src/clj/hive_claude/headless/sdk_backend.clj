@@ -10,7 +10,9 @@
   {:deprecated "2026-03-29"}
   (:require [hive-claude.sdk.facade :as sdk]
             [hive-claude.util :refer [try-resolve rescue]]
-            [taoensso.timbre :as log]))
+            [taoensso.timbre :as log]
+            [hive-spi.addon.headless :as spi-headless]
+            [hive-spi.addon.headless-caps :as spi-caps]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -37,8 +39,7 @@
                         (when-let [f (try-resolve 'hive-mcp.server.guards/child-ling-env)]
                           (f)))]
         (reify
-          hive-mcp.addons.headless/IHeadlessBackend
-
+          spi-headless/IHeadlessBackend
           (headless-id [_] :claude-sdk)
 
           (headless-spawn! [_ ctx opts]
@@ -127,15 +128,13 @@
               (log/info "Interrupting Agent SDK ling" {:id id})
               (sdk/interrupt-headless-sdk! id)))
 
-          hive-mcp.addons.headless/IHeadlessCapabilities
-
+          spi-headless/IHeadlessCapabilities
           (declared-capabilities [_]
             #{:cap/hooks :cap/interrupts :cap/subagents :cap/checkpointing
               :cap/mcp-tools :cap/streaming :cap/multi-turn :cap/budget-guard :cap/saa})
 
           ;; Optional capability protocols
-          hive-mcp.addons.headless-caps/IHookable
-
+          spi-caps/IHookable
           (register-hooks! [_ ling-id hooks-map]
             (log/info "Registering hooks for SDK ling" {:ling-id ling-id
                                                         :hooks (keys hooks-map)})
@@ -146,8 +145,7 @@
             (when-let [sess (sdk/get-session ling-id)]
               (:hooks sess)))
 
-          hive-mcp.addons.headless-caps/ISubagentHost
-
+          spi-caps/ISubagentHost
           (register-subagents! [_ ling-id agent-defs]
             (log/info "Registering subagents for SDK ling" {:ling-id ling-id
                                                             :count (count agent-defs)})
@@ -157,8 +155,7 @@
             (when-let [sess (sdk/get-session ling-id)]
               (:agents sess)))
 
-          hive-mcp.addons.headless-caps/IBudgetGuardable
-
+          spi-caps/IBudgetGuardable
           (set-budget! [_ ling-id max-usd]
             (rescue {:budget-set? false :max-usd max-usd}
                     (when-let [register-fn (try-resolve 'hive-mcp.agent.hooks.budget/register-budget!)]
