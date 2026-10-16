@@ -167,17 +167,25 @@
   [{:guard/keys [reason rule-id]}]
   (str "GUARD — " reason (when rule-id (str " [" rule-id "]"))))
 
+(defn- ask-text
+  "The body Claude Code shows the operator when the guard asks for permission."
+  [{:guard/keys [reason rule-id citations]}]
+  (str "The hive guard asks you before this call runs.\n\n" reason
+       (when (seq citations)
+         (str "\n\nStated by: " (str/join ", " citations)))
+       (when rule-id (str "\nRule: " rule-id))))
+
 (defn- hook-event-for
   "The Claude Code hook event a decision applies to.
 
-   Normally the phase the guard stamped onto the decision. A `:deny` with no
-   phase still resolves, because `:pre-tool` is the only DENIABLE phase — that
+   Normally the phase the guard stamped onto the decision. A `:deny` or `:ask`
+   with no phase still resolves, because `:pre-tool` is the only DENIABLE phase — that
    is read off the event vocabulary, not guessed. A `:warn` with no phase
    resolves to nil and encodes to silence: a lost advisory costs a line of
    context, where a lost refusal would cost the refusal."
   [decision]
   (or (phase->event (:guard/phase decision))
-      (when (= :deny (:guard/verdict decision)) "PreToolUse")))
+      (when (contains? #{:deny :ask} (:guard/verdict decision)) "PreToolUse")))
 
 (defn- block-text
   "The reason Claude Code hands the model when a Stop is blocked."
@@ -191,6 +199,8 @@
   "Claude Code's hook output for `decision`.
 
    `:deny`  -> permissionDecision \"deny\" + the reason.
+   `:ask`   -> permissionDecision \"ask\" + the reason: Claude Code prompts the
+               operator, and the call runs only on their yes.
    `:warn`  -> additionalContext only; the call proceeds under the user's own
                permission rules, untouched.
    `:allow` -> {} — silence, so nothing the guard says can widen a permission.
@@ -198,7 +208,8 @@
    Stop is the exception to the hookSpecificOutput channel: Claude Code reads a
    Stop hook's TOP-LEVEL `decision`/`reason`. A `:deny` at :stop encodes to
    `{:decision \"block\"}` — the turn does not end, and the model is handed the
-   reason to act on. A `:warn` at :stop encodes to `systemMessage`, shown to
+   reason to act on. A Stop cannot prompt, so an `:ask` there blocks the same
+   way. A `:warn` at :stop encodes to `systemMessage`, shown to
    the user, since a Stop has no model-context channel.
    Pure; never throws."
   [decision]
@@ -206,6 +217,7 @@
     (if (= "Stop" hook-event)
       (case (:guard/verdict decision)
         :deny {:decision "block" :reason (block-text decision)}
+        :ask  {:decision "block" :reason (block-text decision)}
         :warn {:systemMessage (advisory-text decision)}
         {})
       (let [base {:hookEventName hook-event}]
@@ -213,6 +225,9 @@
           :deny {:hookSpecificOutput
                  (assoc base :permissionDecision "deny"
                         :permissionDecisionReason (refusal-text decision))}
+          :ask  {:hookSpecificOutput
+                 (assoc base :permissionDecision "ask"
+                        :permissionDecisionReason (ask-text decision))}
           :warn {:hookSpecificOutput
                  (assoc base :additionalContext (advisory-text decision))}
           {})))
