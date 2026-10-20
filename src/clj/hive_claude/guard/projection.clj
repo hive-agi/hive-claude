@@ -43,7 +43,8 @@
      a rule changes what fires without anything being regenerated."
   (:require [clojure.string :as str]
             [hive-spi.guard.event :as ge]
-            [hive-spi.guard.ports :as gp]))
+            [hive-spi.guard.ports :as gp]
+            [clojure.java.io :as io]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -244,6 +245,15 @@
    invocation can change what gates a session without anyone editing anything."
   "io.github.hive-agi/bb-mcp {:mvn/version \"1.2.14\"}")
 
+(def hook-ledger-source
+  "The bb source the dispatcher inlines to record an allow-because-unreachable.
+
+   Kept as a resource, not as an escaped string inside `dispatcher-script`, so
+   the very text the hook runs is what a test evaluates. It defines
+   `ledger-path`, `unjudged-record`, `append-unjudged!` and `record-unjudged!`
+   and expects `io` and `str` to be required by the script that carries it."
+  (slurp (io/resource "hive_claude/guard/hook_ledger.bb")))
+
 (def ^:private dispatcher-path
   "Where the generated hook lives. One script for every hook event; the payload
    names its own moment, so a second script would be a second copy of the same
@@ -286,7 +296,16 @@
    FAIL-OPEN, and loudly: when no candidate port holds the seam, or the seam
    throws, or the reply is unreadable, it prints `{}` and exits 0, because a
    guard that cannot answer must not hold the tool call. It writes the reason to
-   stderr so an allow-because-unreachable is visible rather than silent."
+   stderr so an allow-because-unreachable is visible rather than silent.
+
+   RECORDED: stderr alone is invisible, because Claude Code does not surface a
+   non-blocking hook's stderr. Every fail-open therefore also appends one
+   `{:rule-id :guard/unjudged :reason .. :tool .. :at epoch-ms}` EDN line to the
+   guard ledger, which `guard status` tallies as `:unjudged`, so the guard being
+   down for N calls is answerable afterwards. The path is HIVE_GUARD_LEDGER_PATH,
+   else `~/.config/hive-mcp/guard-ledger.ednl`, the JVM side's default. A ledger
+   that cannot be written is swallowed: the hook still prints `{}` and exits 0.
+   A crash of the hook's own code is caught and fails open the same way."
   [provenance]
   (when-not (string? provenance)
     (throw (ex-info "guard: dispatcher provenance must be a one-line string"
@@ -309,6 +328,7 @@
 (require '[bb-mcp.tools.nrepl :as nrepl]
          '[cheshire.core :as json]
          '[clojure.edn :as edn]
+         '[clojure.java.io :as io]
          '[clojure.string :as str])
 
 (def timeout-ms 5000)
@@ -364,14 +384,19 @@
       (not (str/blank? depth)) (assoc :depth depth)
       cred?                    (assoc :credential true))))
 
+" hook-ledger-source "
+(def seen-payload
+  \"The hook payload once read, so a fail-open that happens later can name the
+   tool it let through. Nil until then.\"
+  (atom nil))
+
 (defn open! [reason]
   (binding [*out* *err*] (println \"hive-guard: allowed unjudged —\" reason))
+  (record-unjudged! reason @seen-payload)
   (println \"{}\")
   (System/exit 0))
 
-(let [payload (try (json/parse-stream *in* true) (catch Exception _ nil))
-      ling    (ling-identity)
-      payload (cond-> payload (and (map? payload) (seq ling)) (assoc :hive_ling ling))]
+(defn judge! [payload]
   (when-not (map? payload) (open! \"unreadable payload\"))
   (let [tries (reduce (fn [acc port]
                         (let [r (ask port payload)]
@@ -388,6 +413,15 @@
     ;; Stop hook's: a Stop block is `decision`/`reason`, not hookSpecificOutput.
     (println (json/generate-string
               (select-keys dec [:hookSpecificOutput :decision :reason :systemMessage])))))
+
+(try
+  (let [payload (try (json/parse-stream *in* true) (catch Exception _ nil))
+        ling    (ling-identity)
+        payload (cond-> payload (and (map? payload) (seq ling)) (assoc :hive_ling ling))]
+    (reset! seen-payload payload)
+    (judge! payload))
+  (catch Throwable e
+    (open! (str \"hook crashed: \" (ex-message e)))))
 "))
 
 (defn settings-block
