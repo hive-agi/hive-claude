@@ -1,0 +1,19 @@
+{:seam-gap
+ {:written? true,
+  :lines
+  [{:rule-id :guard/unjudged,
+    :reason ":remote-threw boom",
+    :at 42,
+    :tool "Edit"}]},
+ :unreachable
+ {:written? true,
+  :lines
+  [{:rule-id :guard/unjudged,
+    :reason "7910: unreachable: Connection refused",
+    :at 42,
+    :tool "Bash",
+    :event "PreToolUse"}]},
+ :unreadable
+ {:written? true,
+  :lines
+  [{:rule-id :guard/unjudged, :reason "unreadable payload", :at 42}]}}
