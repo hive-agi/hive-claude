@@ -187,8 +187,12 @@
    {}
    registry))
 
-(defn- step-resolve-deps [ctx]
-  (when-let [deps (resolve-deps @dep-registry)]
+(defn- step-resolve-deps
+  "Resolve the host symbols for ctx. A caller may supply its own symbol map
+   under :registry (a port: any map of key -> qualified symbol); the default
+   is the addon's own `dep-registry`."
+  [{:keys [registry] :as ctx}]
+  (when-let [deps (resolve-deps (or registry @dep-registry))]
     (merge ctx deps)))
 
 (defn- step-register [{:keys [addon register!] :as ctx}]
@@ -201,8 +205,11 @@
     (when (:success? result)
       (assoc ctx :init-result result))))
 
-(defn- step-store-instance [{:keys [addon] :as ctx}]
-  (reset! addon-instance addon)
+(defn- step-store-instance
+  "Remember the registered addon in ctx's :instance-store (any atom) when a
+   caller supplies one, else in the addon's own `addon-instance`."
+  [{:keys [addon instance-store] :as ctx}]
+  (reset! (or instance-store addon-instance) addon)
   ctx)
 
 (defn- run-addon-pipeline!
@@ -219,16 +226,26 @@
 ;; =============================================================================
 
 (defn init-as-addon!
-  "Register hive-claude as an IAddon. Returns registration result."
-  []
-  (if-let [_result (some-> (make-addon)
-                           (as-> addon (run-addon-pipeline! {:addon addon})))]
-    (do
-      (log/info "hive-claude registered as IAddon")
-      {:registered ["claude"] :total 1})
-    (do
-      (log/debug "IAddon unavailable — hive-claude addon registration failed")
-      {:registered [] :total 0})))
+  "Register hive-claude as an IAddon. Returns registration result.
+
+   The one-arity form takes the seams the pipeline reads, so a caller (a test,
+   an embedding host) can substitute them without redefining a var:
+     :registry       map of :register!/:init!/:addon-id -> qualified symbol
+                     naming the host fns (default: `dep-registry`)
+     :instance-store atom receiving the registered addon
+                     (default: the one behind `get-addon-instance`)"
+  ([] (init-as-addon! {}))
+  ([{:keys [registry instance-store]}]
+   (if-let [_result (some-> (make-addon)
+                            (as-> addon (run-addon-pipeline! (cond-> {:addon addon}
+                                                               registry       (assoc :registry registry)
+                                                               instance-store (assoc :instance-store instance-store)))))]
+     (do
+       (log/info "hive-claude registered as IAddon")
+       {:registered ["claude"] :total 1})
+     (do
+       (log/debug "IAddon unavailable — hive-claude addon registration failed")
+       {:registered [] :total 0}))))
 
 (defn addon-ctor
   "Pure constructor for the `hive.claude` IAddon — (config -> IAddon | nil).

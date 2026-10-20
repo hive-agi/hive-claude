@@ -4,7 +4,8 @@
    Tests the init-as-addon! lifecycle without requiring hive-mcp on classpath.
    Verifies graceful degradation when protocols are unavailable."
   (:require [clojure.test :refer [deftest is testing]]
-            [hive-claude.init :as init]))
+            [hive-claude.init :as init]
+            [hive-addon.protocol :as addon]))
 
 ;; Copyright (C) 2026 Pedro Gomes Branquinho (BuddhiLW) <pedrogbranquinho@gmail.com>
 ;;
@@ -12,17 +13,17 @@
 
 (deftest init-without-hive-mcp-returns-empty
   (testing "host registration fails gracefully when its registry ports are absent"
-    (with-redefs [hive-claude.init/addon-instance (atom nil)]
-      (let [registry (ns-resolve 'hive-claude.init 'dep-registry)
-            resolver (ns-resolve 'hive-claude.init 'try-resolve)
-            original @resolver]
-        (with-redefs-fn {resolver (fn [sym]
-                                    (when-not (= "hive-mcp" (namespace sym))
-                                      (original sym)))}
-          (fn []
-            (let [result (hive-claude.init/init-as-addon!)]
-              (is (= {:registered [] :total 0} result))
-              (is (nil? (hive-claude.init/get-addon-instance))))))))))
+    ;; The registry port names host symbols that do not resolve, which is
+    ;; what a classpath without hive-mcp looks like to the pipeline. Nothing
+    ;; is redefined and the host's real addon registry is never touched.
+    (let [store  (atom nil)
+          result (init/init-as-addon!
+                  {:registry       {:register! 'hive-claude.absent-host.core/register-addon!
+                                    :init!     'hive-claude.absent-host.core/init-addon!
+                                    :addon-id  'hive-claude.absent-host.protocol/addon-id}
+                   :instance-store store})]
+      (is (= {:registered [] :total 0} result))
+      (is (nil? @store)))))
 
 (deftest get-addon-instance-nil-without-init
   (testing "get-addon-instance returns nil before initialization"
@@ -40,9 +41,35 @@
       (is (satisfies? iface terminal))
       (is (= :claude (id-fn terminal))))))
 
+(def ^:private stub-calls
+  "Calls the stubbed host registry ports received, in order."
+  (atom []))
+
+(defn stub-register!
+  "Host registry port stub: records the addon id it was asked to register."
+  [addon]
+  (swap! stub-calls conj [:register (addon/addon-id addon)])
+  {:success? true})
+
+(defn stub-init!
+  "Host init port stub: records the id it was asked to initialize."
+  [id]
+  (swap! stub-calls conj [:init id])
+  {:success? true})
+
 (deftest init-with-host-registers-backends
   (testing "init-as-addon! registers against the host when available"
-    (with-redefs [hive-claude.init/addon-instance (atom nil)]
-      (let [result (hive-claude.init/init-as-addon!)]
-        (is (pos? (:total result)))
-        (is (seq (:registered result)))))))
+    ;; The host's registry is a port: stub fns stand in for
+    ;; hive-mcp.addons.core, so the result does not depend on what earlier
+    ;; tests left in the real addon registry.
+    (reset! stub-calls [])
+    (let [store  (atom nil)
+          result (init/init-as-addon!
+                  {:registry       {:register! 'hive-claude.init-test/stub-register!
+                                    :init!     'hive-claude.init-test/stub-init!
+                                    :addon-id  'hive-addon.protocol/addon-id}
+                   :instance-store store})]
+      (is (pos? (:total result)))
+      (is (seq (:registered result)))
+      (is (= [[:register "hive.claude"] [:init "hive.claude"]] @stub-calls))
+      (is (= "hive.claude" (addon/addon-id @store))))))
