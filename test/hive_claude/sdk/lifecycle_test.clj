@@ -21,7 +21,15 @@
 ;; =============================================================================
 
 (defn drain-channel
-  "Read all messages from channel with timeout. Returns vector of messages."
+  "Read all messages from channel with timeout. Returns vector of messages.
+
+   Stops when the channel closes (a nil take on the channel itself) or when
+   `timeout-ms` elapses overall. An idle gap does NOT end the drain: the
+   dispatch thread closes its output channel only after the last phase has
+   run, and a phase can be slow to start (the first compress-and-transition!
+   lazy-loads the host's context.budget namespace, about a second). Treating
+   a 200ms gap as end-of-stream let the assertions read the recorded phases
+   before the :act phase had run."
   [ch & {:keys [timeout-ms] :or {timeout-ms 5000}}]
   (let [deadline (+ (System/currentTimeMillis) timeout-ms)]
     (loop [msgs []]
@@ -30,9 +38,10 @@
           msgs
           (let [to (timeout (min 200 remaining))
                 [v port] (alts!! [ch to])]
-            (if (and (= port ch) (some? v))
-              (recur (conj msgs v))
-              msgs)))))))
+            (cond
+              (and (= port ch) (some? v)) (recur (conj msgs v))
+              (= port ch)                 msgs
+              :else                       (recur msgs))))))))
 
 (defn mock-phase-ch
   "Create a pre-loaded channel that emits messages then closes."

@@ -155,17 +155,39 @@
     (is (not (contains? h :permissionDecision))
         "writing \"allow\" here would AUTO-APPROVE a call the user's own rules were going to gate")))
 
+(deftest an-ask-hands-the-call-to-the-operator-and-says-why
+  (let [h (:hookSpecificOutput
+           (gp/encode-decision proj {:guard/phase :pre-tool
+                                     :guard/verdict :ask
+                                     :guard/reason "this call reaches another project"
+                                     :guard/rule-id :guard/session-project-scope
+                                     :guard/citations ["20261015110032-298a2056"]}))]
+    (is (= "PreToolUse" (:hookEventName h)))
+    (is (= "ask" (:permissionDecision h)))
+    (is (str/includes? (:permissionDecisionReason h) "asks you"))
+    (is (str/includes? (:permissionDecisionReason h) "another project"))
+    (is (str/includes? (:permissionDecisionReason h) "20261015110032-298a2056"))))
+
+(deftest an-ask-with-no-phase-still-asks-at-pre-tool
+  (is (= "ask" (get-in (gp/encode-decision proj {:guard/verdict :ask :guard/reason "r"})
+                       [:hookSpecificOutput :permissionDecision]))))
+
+(deftest a-stop-cannot-prompt-so-an-ask-blocks
+  (let [out (gp/encode-decision proj {:guard/phase :stop :guard/verdict :ask :guard/reason "r"})]
+    (is (= "block" (:decision out)))
+    (is (not (contains? out :hookSpecificOutput)))))
+
 (deftest an-allow-is-silence
   (is (= {} (gp/encode-decision proj {:guard/phase :pre-tool :guard/verdict :allow}))))
 
 (deftest no-verdict-can-widen-a-permission
-  (testing "across every verdict, the only permissionDecision this projection emits is deny"
-    (doseq [verdict [:allow :warn :deny]]
+  (testing "across every verdict, the only permissionDecisions this projection emits are deny and ask"
+    (doseq [verdict [:allow :warn :ask :deny]]
       (let [h (:hookSpecificOutput
                (gp/encode-decision proj {:guard/phase :pre-tool
                                          :guard/verdict verdict
                                          :guard/reason "r"}))]
-        (is (contains? #{nil "deny"} (:permissionDecision h))
+        (is (contains? #{nil "deny" "ask"} (:permissionDecision h))
             (str "verdict " verdict " emitted permissionDecision "
                  (pr-str (:permissionDecision h))))))))
 
