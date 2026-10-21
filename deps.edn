@@ -1,6 +1,5 @@
-{:paths ["src/cljel" "src/clj" "resources"]
- :deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}
-        ;; hive-addon: the IAddon contract this addon implements. Depending on
+{:paths ["src/clj" "resources"]
+ :deps {;; hive-addon: the IAddon contract this addon implements. Depending on
         ;; the contract lib rather than on a host namespace is what lets any
         ;; host, hive-mcp or not, mount this jar.
         ;; Floor 0.3.12: first release carrying hive-addon.terminal and
@@ -20,8 +19,6 @@
  :aliases
  {:build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.1.28"}}
           :ns-default hive-build.api}
-  :cljel {:extra-deps {io.github.BuddhiLW/clojure-elisp {:git/tag "v0.4.0" :git/sha "d42b941"}}
-          :main-opts ["-m" "clojure-elisp.core"]}
   :test {:extra-paths ["test"]
          :extra-deps {lambdaisland/kaocha {:mvn/version "1.91.1392"}
                       org.clojure/test.check {:mvn/version "1.1.3"}

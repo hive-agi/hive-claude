@@ -30,16 +30,30 @@
     (with-redefs [hive-claude.init/addon-instance (atom nil)]
       (is (nil? (hive-claude.init/get-addon-instance))))) )
 
-(deftest terminal-make-reifies-the-hive-addon-contract
-  (testing "make-claude-terminal reifies hive-addon.terminal/ITerminalAddon without hive-mcp"
-    ;; Since f0d2057 the terminal implements the contract lib's protocol, which
-    ;; is a declared dep, so construction no longer depends on the host.
-    (let [make-fn  (requiring-resolve 'hive-claude.terminal/make-claude-terminal)
-          iface    @(requiring-resolve 'hive-addon.terminal/ITerminalAddon)
-          id-fn    (requiring-resolve 'hive-addon.terminal/terminal-id)
-          terminal (make-fn)]
-      (is (satisfies? iface terminal))
-      (is (= :claude (id-fn terminal))))))
+(defn- vessel-symbols
+  "Every symbol in the src forms of `file` that names a vessel namespace:
+   hive-mcp.emacs.*, hive-emacs.*, hive-vim.*, hive-tmux.*, vterm-mcp.*.
+   Quoted symbols count too: a soft resolve of a vessel is still a coupling."
+  [^java.io.File file]
+  (with-open [r (java.io.PushbackReader. (clojure.java.io/reader file))]
+    (let [eof (Object.)]
+      (->> (repeatedly #(read {:read-cond :allow :eof eof} r))
+           (take-while #(not= eof %))
+           (mapcat #(tree-seq coll? seq %))
+           (filter symbol?)
+           (map str)
+           (filter #(re-find #"^(hive-mcp\.emacs|hive-emacs|hive-vim|hive-tmux|vterm-mcp)[./]" %))
+           doall))))
+
+(deftest hive-claude-names-no-vessel
+  (testing "no src namespace names an editor or terminal vessel, even by soft resolve"
+    (let [files (->> (file-seq (clojure.java.io/file "src"))
+                     (filter #(re-find #"\.cljc?$" (.getName ^java.io.File %))))
+          hits  (into {} (keep (fn [f] (when-let [s (seq (vessel-symbols f))]
+                                          [(.getPath ^java.io.File f) (vec (distinct s))])))
+                      files)]
+      (is (seq files) "no sources were read, so an empty hit set would mean nothing")
+      (is (= {} hits)))))
 
 (def ^:private stub-calls
   "Calls the stubbed host registry ports received, in order."
