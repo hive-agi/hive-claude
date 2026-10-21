@@ -9,10 +9,9 @@
 
 <!-- /hive-badges -->
 
-**Claude Code as a hive backend — both the terminal you watch and the headless
-loop you don't.** It exposes Claude Code through the hive addon ports, so the
-same host code can drive an interactive Emacs terminal session or a fully
-headless Agent SDK run.
+**Claude Code as a hive backend.** It exposes Claude Code through the hive
+addon ports as a headless backend, and names no editor: it loads, runs and
+reports healthy with no Emacs, Vim or other vessel present.
 
 ## Coordinates
 
@@ -27,12 +26,16 @@ io.github.hive-agi/hive-claude {:mvn/version "0.1.11"}
 pipeline, with **zero compile-time `hive-mcp` dependencies**; everything
 host-side resolves through `requiring-resolve`.
 
-**Terminal.** `hive-claude.terminal` implements `ITerminalAddon`, bridging
-JVM-side ling management to the Emacs-side `hive-claude` elisp package by
-evaluating elisp through the Emacs client. The elisp is not hand-written: it is
-compiled from ClojureElisp sources under `src/cljel/`.
+**Process.** `hive-claude.headless.process-backend` registers the
+`:claude-process` headless backend: `claude` driven through a ProcessBuilder.
 
-**Headless.** `hive-claude.sdk.agentic-loop` implements `IAgenticLoop` over the
+**Terminal sessions belong to the vessel.** A Claude Code session inside an
+editor buffer (the `:claude` terminal) is contributed by the vessel that owns
+that editor. hive-emacs registers it from `hive-emacs.claude-terminal`, with the
+`hive-claude-*` elisp package in its own `elisp/` tree. Another vessel adds its
+own terminal the same way; hive-claude does not change.
+
+**Agent SDK.** `hive-claude.sdk.agentic-loop` implements `IAgenticLoop` over the
 Claude Agent SDK:
 
 - async start/abort lifecycle via `sdk.lifecycle` spawn/kill
@@ -45,12 +48,12 @@ Claude Agent SDK:
 
 | Path | Contents |
 |---|---|
-| `src/cljel/hive_claude/` | ClojureElisp sources — bridge, config, state, sync |
-| `src/clj/hive_claude/` | Terminal adapter, elisp emission, addon init |
+| `src/clj/hive_claude/` | Addon init, guard projection |
+| `src/clj/hive_claude/headless/` | `:claude-process` headless backend |
 | `src/clj/hive_claude/sdk/` | Agent SDK lifecycle, execution, event loop, options, availability, SAA, phase compression |
 
 The Python-side Agent SDK dependencies (`libpython-clj`) are loaded lazily
-through `requiring-resolve`, so the terminal backend works on a JVM that has no
+through `requiring-resolve`, so the process backend works on a JVM that has no
 Python environment at all.
 
 ## License

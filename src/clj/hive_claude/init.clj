@@ -1,30 +1,24 @@
 (ns hive-claude.init
-  "IAddon implementation for hive-claude — Claude Code terminal + headless backends.
+  "IAddon implementation for hive-claude, the Claude Code headless backend.
 
    Follows the vterm-mcp exemplar: reify + nil-railway pipeline.
-   Zero compile-time hive-mcp dependencies — all resolved via requiring-resolve.
+   Zero compile-time hive-mcp dependencies: all resolved via requiring-resolve.
 
    Registers:
-   1. :claude terminal backend (existing, via terminal-registry)
-   2. :claude-process headless backend (via headless-registry, ProcessBuilder)
+   1. :claude-process headless backend (via headless-registry, ProcessBuilder)
    NOTE: :claude-sdk headless backend is owned by hive-agent-bridge (pure Clojure).
 
-   Elisp loading:
-   On initialize!, injects resources/elisp/ into Emacs load-path and requires
-   hive-claude-config, hive-claude-state, hive-claude-bridge (in dependency order).
-   Follows the lsp-mcp exemplar for load-path injection. The
-   session-fingerprinted reload cache lives in
-   `hive-claude.elisp-load-state` — split out so the cache can be exercised
-   without pulling hive-mcp.addons.* onto the test classpath.
+   Vessel-neutral: hive-claude names no editor. The interactive :claude
+   terminal (a Claude Code session inside an editor buffer) is contributed by
+   the vessel that hosts it (hive-emacs registers it from
+   `hive-emacs.claude-terminal`), so this addon loads, runs and reports healthy
+   with no editor running.
 
    Usage:
      ;; Via addon system (auto-discovered from META-INF manifest):
      (init-as-addon!)"
   (:require [hive-addon.protocol :as addon]
-            [hive-claude.terminal :as terminal]
             [hive-claude.log :as log]
-            [hive-claude.elisp-load-state :as els]
-            [hive-dsl.result :as r]
             [clojure.set :as set]
             [hive-claude.guard.projection :as guard-projection]
             [hive-spi.guard.ports :as gp]
@@ -40,14 +34,6 @@
 
 (def ^:private try-resolve util/try-resolve)
 
-;; =============================================================================
-;; Elisp Load State — thin re-exports for backwards compat.
-;; The real implementation lives in hive-claude.elisp-load-state.
-;; =============================================================================
-
-(def reset-elisp-load-state! els/reset-elisp-load-state!)
-(def elisp-loaded?          els/elisp-loaded?)
-(def ensure-elisp-loaded!   els/ensure-elisp-loaded!)
 
 ;; =============================================================================
 ;; IAddon Implementation
@@ -66,24 +52,13 @@
 
         (addon-type [_] :native)
 
-        (capabilities [_] #{:terminal :headless :health-reporting})
+        (capabilities [_] #{:headless :health-reporting})
 
         (initialize! [_ _config]
           (if (:initialized? @state)
             {:success? true :already-initialized? true}
-            (let [;; Load elisp into Emacs first (idempotent, best-effort)
-                  _elisp-ok? (ensure-elisp-loaded!)
-                  claude-addon (terminal/make-claude-terminal)
-                  registered-ids (atom [])]
-              ;; 1. Terminal backend (existing)
-              (when claude-addon
-                (when-let [register-fn (try-resolve 'hive-mcp.agent.ling.terminal-registry/register-terminal!)]
-                  (let [result (register-fn :claude claude-addon)]
-                    (when (:registered? result)
-                      (swap! registered-ids conj :claude)
-                      (log/info "hive-claude: :claude terminal registered")))))
-
-              ;; 2. Headless Process backend (ProcessBuilder)
+            (let [registered-ids (atom [])]
+              ;; 1. Headless Process backend (ProcessBuilder)
               ;; NOTE: :claude-sdk is now owned by hive-agent-bridge (pure Clojure,
               ;; no libpython-clj). hive-claude only owns :claude-process.
               (when-let [reg-fn (try-resolve 'hive-mcp.agent.ling.headless-registry/register-headless!)]
@@ -100,7 +75,7 @@
                   (catch Exception e
                     (log/debug "Process backend not available" {:error (ex-message e)}))))
 
-              ;; 3. Reconcile: deregister stale headless entries from previous sessions
+              ;; 2. Reconcile: deregister stale headless entries from previous sessions
               ;; Only :claude-process — :claude-sdk is owned by hive-agent-bridge
               (let [owned-ids #{:claude-process}
                     live-ids  (set (filter owned-ids @registered-ids))
@@ -115,7 +90,6 @@
                 (if (seq ids)
                   (do
                     (reset! state {:initialized? true
-                                   :terminal-addon claude-addon
                                    :registered-ids ids})
                     (log/info "hive-claude addon initialized" {:registered ids})
                     {:success? true
@@ -126,13 +100,6 @@
 
         (shutdown! [_]
           (when (:initialized? @state)
-            ;; Unregister sync hooks
-            (r/guard Exception nil
-                     (when-let [eval-fn (try-resolve 'hive-mcp.emacs.client/eval-elisp-with-timeout)]
-                       (eval-fn "(hive-claude-sync-unregister-hooks-bang)" 3000)))
-            ;; Deregister terminal
-            (when-let [dereg-fn (try-resolve 'hive-mcp.agent.ling.terminal-registry/deregister-terminal!)]
-              (dereg-fn :claude))
             ;; Deregister headless backends (only those we own)
             (when-let [dereg-fn (try-resolve 'hive-mcp.agent.ling.headless-registry/deregister-headless!)]
               (doseq [id (filter #{:claude-process} (:registered-ids @state))]
@@ -155,14 +122,8 @@
 
         (health [_]
           (if (:initialized? @state)
-            (let [emacs-ok? (try
-                              (when-let [eval-fn (try-resolve 'hive-mcp.emacs.client/eval-elisp-with-timeout)]
-                                (let [{:keys [success]} (eval-fn "(featurep 'hive-claude-bridge)" 2000)]
-                                  success))
-                              (catch Exception _ false))]
-              {:status (if emacs-ok? :ok :degraded)
-               :details {:terminal-id :claude
-                         :emacs-has-hive-claude emacs-ok?}})
+            {:status  :ok
+             :details {:registered-ids (:registered-ids @state)}}
             {:status :down
              :details {:reason "not initialized"}})))))
 
