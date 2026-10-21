@@ -71,6 +71,14 @@
       (is (str/includes? s "(some? (System/getenv \"HIVE_AGENT_CREDENTIAL\"))"))
       (is (= 1 (count (re-seq #"HIVE_AGENT_CREDENTIAL" s)))))))
 
+(deftest the-hook-ignores-the-working-directory-bb-edn
+  (testing "the shebang pins bb's config, so a project bb.edn in the session cwd
+            cannot merge its :deps into the hook's add-deps (2026-10-06:
+            Coord of unknown type from clones-ref/datahike)"
+    (let [s (p/dispatcher-script "one line")]
+      (is (str/starts-with? s "#!/usr/bin/env -S bb --config /dev/null\n"))
+      (is (= 1 (count (filter #(str/starts-with? % "#!") (str/split-lines s))))))))
+
 ;;; ===========================================================================
 ;;; Identity
 ;;; ===========================================================================
