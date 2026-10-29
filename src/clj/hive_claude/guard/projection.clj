@@ -116,20 +116,26 @@
         (true? credential)  (assoc :ling/credential? true)))))
 
 (defn- phase-entries
-  "The phase-specific GuardEvent entries for `phase` out of `raw`."
-  [phase {:keys [tool_name tool_input tool_response prompt source agent_type]}]
-  (case phase
-    :pre-tool       (cond-> {:tool/name tool_name}
-                      (map? tool_input) (assoc :tool/input tool_input))
-    :post-tool      (cond-> {:tool/name tool_name}
-                      (map? tool_input)     (assoc :tool/input tool_input)
-                      (some? tool_response) (assoc :tool/result tool_response))
-    :session-start  (cond-> {}
-                      (trigger-keys source) (assoc :session/trigger (trigger-keys source)))
-    :subagent-start (cond-> {}
-                      (string? agent_type) (assoc :agent/type agent_type))
-    :prompt-submit  {:prompt (or prompt "")}
-    :stop           {}))
+  "The phase-specific GuardEvent entries for `phase` out of `raw`. At the
+   tool phases, Claude Code's `tool_use_id` becomes `:tool/use-id`: the one
+   id a PreToolUse and the PostToolUse of the SAME call share, which is how
+   the guard learns a call it prompted for was allowed (it ran)."
+  [phase {:keys [tool_name tool_input tool_response prompt source agent_type tool_use_id]}]
+  (let [use-id (when (and (string? tool_use_id) (not (str/blank? tool_use_id))) tool_use_id)]
+    (case phase
+      :pre-tool       (cond-> {:tool/name tool_name}
+                        (map? tool_input) (assoc :tool/input tool_input)
+                        use-id            (assoc :tool/use-id use-id))
+      :post-tool      (cond-> {:tool/name tool_name}
+                        (map? tool_input)     (assoc :tool/input tool_input)
+                        (some? tool_response) (assoc :tool/result tool_response)
+                        use-id                (assoc :tool/use-id use-id))
+      :session-start  (cond-> {}
+                        (trigger-keys source) (assoc :session/trigger (trigger-keys source)))
+      :subagent-start (cond-> {}
+                        (string? agent_type) (assoc :agent/type agent_type))
+      :prompt-submit  {:prompt (or prompt "")}
+      :stop           {})))
 
 (defn ->event
   "Assemble the GuardEvent `raw` describes, or nil when it describes none.
@@ -261,14 +267,21 @@
   "~/.claude/hooks/hive-guard.bb")
 
 (defn- rule-phases
-  "The phases `rule-set` actually carries rules for, in a stable order."
+  "The hook events `rule-set` needs, in a stable order: the phases it carries
+   rules for, plus PostToolUse whenever a rule ASKS at :pre-tool. Claude Code
+   answers its own \"ask\" prompt and never tells the hook; PostToolUse fires
+   only for a call that ran, so that event is how the guard sees the yes."
   [rule-set]
-  (->> rule-set
-       (mapcat :rule/phases)
-       set
-       (keep phase->event)
-       sort
-       vec))
+  (let [asks? (some #(and (= :ask (:rule/verdict %))
+                          (contains? (set (:rule/phases %)) :pre-tool))
+                    rule-set)]
+    (->> rule-set
+         (mapcat :rule/phases)
+         set
+         (into (if asks? #{:post-tool} #{}))
+         (keep phase->event)
+         sort
+         vec)))
 
 (defn dispatcher-script
   "The bb dispatcher, as text.
