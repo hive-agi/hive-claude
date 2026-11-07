@@ -111,11 +111,24 @@
   (let [e (gp/decode-event proj {:hook_event_name "PreToolUse"
                                  :tool_name "Bash"
                                  :tool_input {:command "git add -A"}
+                                 :tool_use_id "toolu_01"
                                  :cwd "/repo" :session_id "s1"})]
     (is (= "Bash" (:tool/name e)))
     (is (= {:command "git add -A"} (:tool/input e)))
     (is (= "/repo" (:cwd e)))
-    (is (= "s1" (:session/id e)))))
+    (is (= "s1" (:session/id e)))
+    (is (= "toolu_01" (:tool/use-id e))))
+  (testing "a PostToolUse carries the same call's tool-use id"
+    (let [e (gp/decode-event proj {:hook_event_name "PostToolUse" :tool_name "Bash"
+                                   :tool_input {:command "ls"} :tool_response "ok"
+                                   :tool_use_id "toolu_01" :session_id "s1"})]
+      (is (= :post-tool (:guard/phase e)))
+      (is (= "toolu_01" (:tool/use-id e)))
+      (is (ge/valid? e))))
+  (testing "a blank tool-use id is dropped, never guessed"
+    (is (not (contains? (gp/decode-event proj {:hook_event_name "PreToolUse" :tool_name "Bash"
+                                               :tool_use_id "  "})
+                        :tool/use-id)))))
 
 (deftest an-unmapped-hook-event-is-nil-not-a-guess
   (doseq [raw [{:hook_event_name "PreCompact"}
@@ -236,7 +249,18 @@
     (is (not (contains? events "Stop"))
         "a rule set with no :stop rule registers no Stop hook"))
   (testing "an empty rule set registers no hooks at all"
-    (is (empty? (-> (gp/render-config proj []) :settings-block :hooks)))))
+    (is (empty? (-> (gp/render-config proj []) :settings-block :hooks))))
+  (testing "a rule that ASKS at :pre-tool also registers PostToolUse, where the yes is seen"
+    (let [asking (conj rule-set
+                       (gr/guard-rule {:rule/id      :t/ask-foreign
+                                       :rule/phases  #{:pre-tool}
+                                       :rule/match   {:match/tool ["Bash"]}
+                                       :rule/verdict :ask
+                                       :rule/reason  "another project"}))
+          hooks  (-> (gp/render-config proj asking) :settings-block :hooks)]
+      (is (contains? (set (keys hooks)) "PostToolUse"))
+      (is (= [{:matcher "*" :hooks [{:type "command" :command "~/.claude/hooks/hive-guard.bb" :timeout 10}]}]
+             (get hooks "PostToolUse"))))))
 
 (deftest the-generated-script-carries-no-rules
   (let [script (-> (gp/render-config proj rule-set) :files first :content)]

@@ -116,20 +116,26 @@
         (true? credential)  (assoc :ling/credential? true)))))
 
 (defn- phase-entries
-  "The phase-specific GuardEvent entries for `phase` out of `raw`."
-  [phase {:keys [tool_name tool_input tool_response prompt source agent_type]}]
-  (case phase
-    :pre-tool       (cond-> {:tool/name tool_name}
-                      (map? tool_input) (assoc :tool/input tool_input))
-    :post-tool      (cond-> {:tool/name tool_name}
-                      (map? tool_input)     (assoc :tool/input tool_input)
-                      (some? tool_response) (assoc :tool/result tool_response))
-    :session-start  (cond-> {}
-                      (trigger-keys source) (assoc :session/trigger (trigger-keys source)))
-    :subagent-start (cond-> {}
-                      (string? agent_type) (assoc :agent/type agent_type))
-    :prompt-submit  {:prompt (or prompt "")}
-    :stop           {}))
+  "The phase-specific GuardEvent entries for `phase` out of `raw`. At the
+   tool phases, Claude Code's `tool_use_id` becomes `:tool/use-id`: the one
+   id a PreToolUse and the PostToolUse of the SAME call share, which is how
+   the guard learns a call it prompted for was allowed (it ran)."
+  [phase {:keys [tool_name tool_input tool_response prompt source agent_type tool_use_id]}]
+  (let [use-id (when (and (string? tool_use_id) (not (str/blank? tool_use_id))) tool_use_id)]
+    (case phase
+      :pre-tool       (cond-> {:tool/name tool_name}
+                        (map? tool_input) (assoc :tool/input tool_input)
+                        use-id            (assoc :tool/use-id use-id))
+      :post-tool      (cond-> {:tool/name tool_name}
+                        (map? tool_input)     (assoc :tool/input tool_input)
+                        (some? tool_response) (assoc :tool/result tool_response)
+                        use-id                (assoc :tool/use-id use-id))
+      :session-start  (cond-> {}
+                        (trigger-keys source) (assoc :session/trigger (trigger-keys source)))
+      :subagent-start (cond-> {}
+                        (string? agent_type) (assoc :agent/type agent_type))
+      :prompt-submit  {:prompt (or prompt "")}
+      :stop           {})))
 
 (defn ->event
   "Assemble the GuardEvent `raw` describes, or nil when it describes none.
@@ -254,6 +260,19 @@
    and expects `io` and `str` to be required by the script that carries it."
   (slurp (io/resource "hive_claude/guard/hook_ledger.bb")))
 
+(def hook-trace-source
+  "The bb source the dispatcher inlines to append one redacted session-trace
+   line on Stop / SubagentStart, for hive-assay's probe corpus (plan H2-09,
+   dev-loop trigger B).
+
+   A copy of hive-assay `resources/hive_assay/hooks/hive_guard_trace.bb`, kept
+   as a resource so the text the hook runs is the text a test evaluates. It
+   declares its own `hive-guard-trace` namespace; the dispatcher switches back
+   to `user` right after it. OPT-IN: it writes nothing unless HIVE_GUARD_TRACE=1
+   and HIVE_ASSAY_TRACE_DIR names an existing directory, never throws and
+   prints nothing, so the hook's answer cannot change."
+  (slurp (io/resource "hive_claude/guard/hive_guard_trace.bb")))
+
 (def ^:private dispatcher-path
   "Where the generated hook lives. One script for every hook event; the payload
    names its own moment, so a second script would be a second copy of the same
@@ -261,14 +280,21 @@
   "~/.claude/hooks/hive-guard.bb")
 
 (defn- rule-phases
-  "The phases `rule-set` actually carries rules for, in a stable order."
+  "The hook events `rule-set` needs, in a stable order: the phases it carries
+   rules for, plus PostToolUse whenever a rule ASKS at :pre-tool. Claude Code
+   answers its own \"ask\" prompt and never tells the hook; PostToolUse fires
+   only for a call that ran, so that event is how the guard sees the yes."
   [rule-set]
-  (->> rule-set
-       (mapcat :rule/phases)
-       set
-       (keep phase->event)
-       sort
-       vec))
+  (let [asks? (some #(and (= :ask (:rule/verdict %))
+                          (contains? (set (:rule/phases %)) :pre-tool))
+                    rule-set)]
+    (->> rule-set
+         (mapcat :rule/phases)
+         set
+         (into (if asks? #{:post-tool} #{}))
+         (keep phase->event)
+         sort
+         vec)))
 
 (defn dispatcher-script
   "The bb dispatcher, as text.
@@ -390,6 +416,12 @@
       cred?                    (assoc :credential true))))
 
 " hook-ledger-source "
+" hook-trace-source "
+(in-ns 'user)
+
+(defn trace! [payload]
+  (try (hive-guard-trace/append! payload) (catch Throwable _ nil)))
+
 (def seen-payload
   \"The hook payload once read, so a fail-open that happens later can name the
    tool it let through. Nil until then.\"
@@ -424,6 +456,7 @@
         ling    (ling-identity)
         payload (cond-> payload (and (map? payload) (seq ling)) (assoc :hive_ling ling))]
     (reset! seen-payload payload)
+    (when (map? payload) (trace! payload))
     (judge! payload))
   (catch Throwable e
     (open! (str \"hook crashed: \" (ex-message e)))))
