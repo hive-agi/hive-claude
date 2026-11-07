@@ -260,6 +260,19 @@
    and expects `io` and `str` to be required by the script that carries it."
   (slurp (io/resource "hive_claude/guard/hook_ledger.bb")))
 
+(def hook-trace-source
+  "The bb source the dispatcher inlines to append one redacted session-trace
+   line on Stop / SubagentStart, for hive-assay's probe corpus (plan H2-09,
+   dev-loop trigger B).
+
+   A copy of hive-assay `resources/hive_assay/hooks/hive_guard_trace.bb`, kept
+   as a resource so the text the hook runs is the text a test evaluates. It
+   declares its own `hive-guard-trace` namespace; the dispatcher switches back
+   to `user` right after it. OPT-IN: it writes nothing unless HIVE_GUARD_TRACE=1
+   and HIVE_ASSAY_TRACE_DIR names an existing directory, never throws and
+   prints nothing, so the hook's answer cannot change."
+  (slurp (io/resource "hive_claude/guard/hive_guard_trace.bb")))
+
 (def ^:private dispatcher-path
   "Where the generated hook lives. One script for every hook event; the payload
    names its own moment, so a second script would be a second copy of the same
@@ -403,6 +416,12 @@
       cred?                    (assoc :credential true))))
 
 " hook-ledger-source "
+" hook-trace-source "
+(in-ns 'user)
+
+(defn trace! [payload]
+  (try (hive-guard-trace/append! payload) (catch Throwable _ nil)))
+
 (def seen-payload
   \"The hook payload once read, so a fail-open that happens later can name the
    tool it let through. Nil until then.\"
@@ -437,6 +456,7 @@
         ling    (ling-identity)
         payload (cond-> payload (and (map? payload) (seq ling)) (assoc :hive_ling ling))]
     (reset! seen-payload payload)
+    (when (map? payload) (trace! payload))
     (judge! payload))
   (catch Throwable e
     (open! (str \"hook crashed: \" (ex-message e)))))
