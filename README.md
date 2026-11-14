@@ -35,14 +35,11 @@ that editor. hive-emacs registers it from `hive-emacs.claude-terminal`, with the
 `hive-claude-*` elisp package in its own `elisp/` tree. Another vessel adds its
 own terminal the same way; hive-claude does not change.
 
-**Agent SDK.** `hive-claude.sdk.agentic-loop` implements `IAgenticLoop` over the
-Claude Agent SDK:
-
-- async start/abort lifecycle via `sdk.lifecycle` spawn/kill
-- `collect-response!` with a `CompletableFuture` and a timeout
-- cost tracking accumulated from SAA completion events
-- transcript access from session observations
-- mid-session constraints through budget guardrails
+**Agent SDK.** Retired. The `hive-claude.sdk.*` subtree (agentic-loop, lifecycle,
+execution, event-loop, options, availability, SAA, phase-compression) and the
+`headless.sdk-backend` that reached into it were deleted in [SDK-RETIRE-3]: the
+libpython-clj path was disabled (asyncio SIGSEGV) and the Agent-SDK drone
+backend is owned elsewhere, in pure Clojure. No Python dependency remains.
 
 ## Layout
 
@@ -50,11 +47,6 @@ Claude Agent SDK:
 |---|---|
 | `src/clj/hive_claude/` | Addon init, guard projection |
 | `src/clj/hive_claude/headless/` | `:claude-process` headless backend |
-| `src/clj/hive_claude/sdk/` | Agent SDK lifecycle, execution, event loop, options, availability, SAA, phase compression |
-
-The Python-side Agent SDK dependencies (`libpython-clj`) are loaded lazily
-through `requiring-resolve`, so the process backend works on a JVM that has no
-Python environment at all.
 
 ## License
 
