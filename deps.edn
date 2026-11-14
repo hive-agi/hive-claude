@@ -12,10 +12,11 @@
         org.clojure/clojure {:mvn/version "1.12.6"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
         cheshire/cheshire {:mvn/version "6.2.0"}
-        ;; SDK dependencies (loaded lazily via requiring-resolve)
-        clj-python/libpython-clj {:mvn/version "2.026"}
-        org.clojure/core.async {:mvn/version "1.9.865"}
-        org.clojure/data.json {:mvn/version "2.5.2"}}
+        ;; The Agent-SDK subtree was retired in [SDK-RETIRE-3]: its deps
+        ;; (clj-python/libpython-clj, org.clojure/core.async,
+        ;; org.clojure/data.json) went with it. cheshire stays: the guard
+        ;; projection resolves cheshire.core at runtime.
+        }
  :aliases
  {:build {:deps {io.github.hive-agi/hive-build {:mvn/version "0.3.1"}}
           :ns-default hive-build.api}

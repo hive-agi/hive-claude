@@ -92,13 +92,11 @@
   "file -> the host namespaces it may still require, each with the card that
    will remove it. A waiver is a DEBT with a name, not an exemption: the test
    below fails if a waived file stops violating, so a waiver cannot outlive the
-   thing it waives."
-  {"src/clj/hive_claude/sdk/agentic_loop.clj"
-   {:requires #{"hive-mcp.agent.agentic-loop"}
-    :card     "[AGENTIC-LOOP-PORT] 20260902101929-736fc486"
-    :why      (str "porting it needs a licensing decision (this repo is AGPL on "
-                   "Clojars, the host is proprietary on Gitea), which is Pedro's "
-                   "call and not a refactor")}})
+   thing it waives.
+
+   Empty since [SDK-RETIRE-3] deleted the sdk/ subtree: the sole waiver named
+   src/clj/hive_claude/sdk/agentic_loop.clj, and the file is gone."
+  {})
 
 (deftest sources-were-found-test
   (is (seq (clj-sources))
@@ -115,12 +113,20 @@
         (str "these src namespaces require the host at load time: " unwaived))))
 
 (deftest every-require-waiver-is-still-needed-test
-  (let [offenders (scan #(or (require-violations %) []))]
-    (doseq [[file {:keys [requires card]}] require-waivers]
-      (let [actual (set (get offenders file))]
-        (is (= requires (set/intersection requires actual))
-            (str file " no longer requires " (set/difference requires actual)
-                 ", so delete that waiver and close " card))))))
+  (let [offenders (scan #(or (require-violations %) []))
+        stale     (into {}
+                        (keep (fn [[file {:keys [requires card]}]]
+                                (let [actual  (set (get offenders file))
+                                      missing (set/difference requires actual)]
+                                  (when (seq missing)
+                                    [file {:card card
+                                           :no-longer-requires (vec (sort missing))}]))))
+                        require-waivers)]
+    ;; One assertion whether or not any waiver is declared, so an empty map
+    ;; (the post-[SDK-RETIRE-3] state) still exercises the invariant.
+    (is (= {} stale)
+        (str "these waivers no longer match a live violation, so delete them "
+             "and close their cards: " stale))))
 
 (deftest no-src-namespace-implements-a-host-protocol-test
   (let [offenders (scan impl-violations)]
