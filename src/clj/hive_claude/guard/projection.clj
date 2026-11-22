@@ -115,12 +115,25 @@
         d                   (assoc :ling/depth d)
         (true? credential)  (assoc :ling/credential? true)))))
 
+(defn- stop-entries
+  "The Stop payload's turn facts: `transcript_path` -> `:transcript/path` (where
+   a :stop enricher reads the ending turn), `stop_hook_active` ->
+   `:stop/hook-active?` (this Stop is a re-entry after a block, so a rule must
+   not hold the turn again). The turn's text and tool calls are read from the
+   transcript, never from a payload summary: only the transcript shows whether
+   the turn raised an ask. Malformed values are dropped. Pure."
+  [{:keys [transcript_path stop_hook_active]}]
+  (cond-> {}
+    (and (string? transcript_path) (not (str/blank? transcript_path)))
+    (assoc :transcript/path transcript_path)
+    (true? stop_hook_active) (assoc :stop/hook-active? true)))
+
 (defn- phase-entries
   "The phase-specific GuardEvent entries for `phase` out of `raw`. At the
    tool phases, Claude Code's `tool_use_id` becomes `:tool/use-id`: the one
    id a PreToolUse and the PostToolUse of the SAME call share, which is how
    the guard learns a call it prompted for was allowed (it ran)."
-  [phase {:keys [tool_name tool_input tool_response prompt source agent_type tool_use_id]}]
+  [phase {:keys [tool_name tool_input tool_response prompt source agent_type tool_use_id] :as raw}]
   (let [use-id (when (and (string? tool_use_id) (not (str/blank? tool_use_id))) tool_use_id)]
     (case phase
       :pre-tool       (cond-> {:tool/name tool_name}
@@ -135,7 +148,7 @@
       :subagent-start (cond-> {}
                         (string? agent_type) (assoc :agent/type agent_type))
       :prompt-submit  {:prompt (or prompt "")}
-      :stop           {})))
+      :stop           (stop-entries raw))))
 
 (defn ->event
   "Assemble the GuardEvent `raw` describes, or nil when it describes none.

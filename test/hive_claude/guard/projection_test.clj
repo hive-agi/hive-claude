@@ -370,3 +370,19 @@
     (is (= {} (p/->hook-output {:guard/verdict :allow :guard/phase :stop}))))
   (testing "the dispatcher forwards the Stop keys"
     (is (str/includes? (p/dispatcher-script "one line") ":decision :reason"))))
+
+(deftest stop-decodes-the-transcript-path-and-the-reentry-mark
+  (let [ev (gp/decode-event proj {:hook_event_name "Stop" :session_id "s1"
+                                  :transcript_path "/home/u/.claude/projects/p/s1.jsonl"
+                                  :stop_hook_active true})]
+    (is (ge/valid? ev))
+    (is (= "/home/u/.claude/projects/p/s1.jsonl" (:transcript/path ev))
+        "a :stop enricher reads the ending turn from here")
+    (is (true? (:stop/hook-active? ev))
+        "a re-entry after a block is marked, so no rule holds the turn twice"))
+  (testing "a first Stop carries no re-entry mark, and malformed values are dropped"
+    (let [ev (gp/decode-event proj {:hook_event_name "Stop" :session_id "s1"
+                                    :transcript_path "  " :stop_hook_active false})]
+      (is (ge/valid? ev))
+      (is (not (contains? ev :transcript/path)))
+      (is (not (contains? ev :stop/hook-active?))))))
