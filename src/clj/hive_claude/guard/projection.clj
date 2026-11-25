@@ -79,11 +79,15 @@
 ;;; ===========================================================================
 
 (defn- optional-entries
-  "The common GuardEvent entries `raw` actually carries."
-  [{:keys [session_id cwd]}]
+  "The common GuardEvent entries `raw` actually carries. A subagent's
+   `agent_id` becomes `:subagent/id`, so a subagent sharing its parent's
+   `session_id` is still its own context (hive-guard.core.advisory)."
+  [{:keys [session_id cwd agent_id]}]
   (cond-> {}
     (not (str/blank? session_id)) (assoc :session/id session_id)
-    (not (str/blank? cwd))        (assoc :cwd cwd)))
+    (not (str/blank? cwd))        (assoc :cwd cwd)
+    (and (string? agent_id) (not (str/blank? agent_id)))
+    (assoc :subagent/id agent_id)))
 
 (defn- ->depth
   "A ling depth from the hook's string (or number), or nil."
