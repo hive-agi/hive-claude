@@ -62,6 +62,17 @@
       (is (ge/valid? e) (pr-str raw))
       (is (not-any? #(contains? e %) [:agent/id :ling/depth :ling/credential?]) (pr-str raw)))))
 
+(deftest a-subagent-agent-id-is-decoded-as-its-own-context
+  (let [e (p/->event (assoc bash-pre :session_id "s-1" :agent_id "a-77"))]
+    (is (ge/valid? e))
+    (is (= "s-1" (:session/id e)))
+    (is (= "a-77" (:subagent/id e)))
+    (is (not (contains? e :agent/id)) "a native subagent is not a ling"))
+  (doseq [raw [(assoc bash-pre :session_id "s-1")
+               (assoc bash-pre :session_id "s-1" :agent_id "")
+               (assoc bash-pre :session_id "s-1" :agent_id 7)]]
+    (is (not (contains? (p/->event raw) :subagent/id)) (pr-str raw))))
+
 (deftest the-hook-reads-the-ling-identity-from-its-environment
   (let [s (p/dispatcher-script "one line")]
     (doseq [v ["CLAUDE_SWARM_SLAVE_ID" "HIVE_LING_DEPTH"]]
